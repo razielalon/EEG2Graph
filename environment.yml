@@ -1,0 +1,13 @@
+name: eeg_graph
+channels:
+  - defaults
+  - conda-forge
+  - bioconda
+  - nvidia
+dependencies:
+  - python=3.10
+  - cpuonly
+  - pytorch
+  - torchaudio
+  - torchvision
+prefix: /home/zivcz/.conda/envs/eeg_graph
