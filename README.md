@@ -13,3 +13,5 @@ conda activate eeg_graph
 conda env export --from-history > environment.yml
 ```
 
+## razi changes - remove later
+git git git
