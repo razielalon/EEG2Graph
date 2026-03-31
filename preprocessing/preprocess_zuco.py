@@ -138,116 +138,114 @@ def h5_to_array(dataset, h5file):
 
 
 # =============================================================================
+# HDF5 Shape Helpers
+# =============================================================================
+
+def get_ref_count(dataset):
+    """
+    Get the number of elements in an HDF5 dataset of references,
+    handling MATLAB's transposed storage.
+
+    MATLAB v7.3 can store a (1, N) cell array as either shape (1, N)
+    or (N, 1) in HDF5 depending on the version. We take the max
+    dimension to get the actual element count.
+    """
+    shape = dataset.shape
+    if len(shape) == 1:
+        return shape[0]
+    else:
+        return max(shape)
+
+
+def get_ref_at(dataset, index):
+    """
+    Get a single reference from an HDF5 dataset at the given index,
+    handling both (1, N) and (N, 1) layouts.
+    """
+    shape = dataset.shape
+    if len(shape) == 1:
+        return dataset[index]
+    elif shape[0] == 1:
+        # Shape is (1, N) — words are along axis 1
+        return dataset[0, index]
+    elif shape[1] == 1:
+        # Shape is (N, 1) — words are along axis 0
+        return dataset[index, 0]
+    else:
+        # Unexpected shape — try (0, index) as default
+        return dataset[0, index]
+
+
+# =============================================================================
 # Core Extraction Functions
 # =============================================================================
 
-def extract_sentence_data(h5file, sentence_ref):
+def extract_sentence_data(h5file, sentence_ref=None, sentence_text=None, word_group=None):
     """
     Extract word-level EEG features and sentence text from a single sentence.
 
-    Works when sentenceData is a Dataset of references — each reference
-    points to a group containing 'content', 'word', etc.
-
-    Args:
-        h5file: Open h5py File object
-        sentence_ref: HDF5 reference to the sentence data
+    Supports two calling conventions:
+      1. extract_sentence_data(h5file, sentence_ref)
+         — when sentenceData is a Dataset of refs, each ref points to a group
+           with 'content' and 'word' children.
+      2. extract_sentence_data(h5file, sentence_text=text, word_group=grp)
+         — when sentenceData is a struct-array Group, text and word data
+           are accessed separately by the caller.
 
     Returns:
         dict with keys:
             - 'text': The sentence string
             - 'words': List of word strings
-            - 'eeg_features': np.array of shape (num_words, 840), zero-padded for skipped words
-            - 'has_fixation': Boolean mask of shape (num_words,) — True if word was fixated
-        Or None if the sentence data is invalid/incomplete.
+            - 'eeg_features': np.array of shape (num_words, 840)
+            - 'has_fixation': Boolean mask of shape (num_words,)
+        Or None if invalid/incomplete.
     """
-    try:
-        sent_group = h5file[sentence_ref]
-    except Exception:
-        return None
 
-    # --- Extract sentence text ---
-    sentence_text = None
-    if "content" in sent_group:
-        sentence_text = h5_to_string(sent_group["content"], h5file)
+    # --- Resolve sentence text and word group ---
+    if sentence_text is not None and word_group is not None:
+        # Called with explicit text + word_group (struct-array layout)
+        pass
+    elif sentence_ref is not None:
+        # Called with a reference to a sentence group
+        try:
+            if isinstance(sentence_ref, h5py.Group):
+                sent_group = sentence_ref
+            else:
+                sent_group = h5file[sentence_ref]
+        except Exception:
+            return None
 
-    if sentence_text is None:
-        return None
+        if "content" in sent_group:
+            sentence_text = h5_to_string(sent_group["content"], h5file)
 
-    # --- Access word-level data ---
-    if "word" not in sent_group:
-        return None
-
-    word_group = sent_group["word"]
-    return _extract_words_from_group(h5file, sentence_text, word_group)
-
-
-def extract_sentence_data_from_group(h5file, sentence_data_group, sentence_idx):
-    """
-    Extract word-level EEG features and sentence text from a single sentence.
-
-    Works when sentenceData is a Group (struct of arrays) — each field
-    like 'content', 'word' is a (N, 1) array of references.
-
-    Args:
-        h5file: Open h5py File object
-        sentence_data_group: The sentenceData HDF5 Group
-        sentence_idx: Index of the sentence to extract
-
-    Returns:
-        Same dict as extract_sentence_data, or None if invalid.
-    """
-    # --- Extract sentence text ---
-    if "content" not in sentence_data_group:
-        return None
-
-    try:
-        content_ref = sentence_data_group["content"][sentence_idx, 0]
-        sentence_text = h5_to_string(content_ref, h5file)
-    except Exception:
-        return None
-
-    if sentence_text is None:
-        return None
-
-    # --- Access word-level data ---
-    if "word" not in sentence_data_group:
-        return None
-
-    try:
-        word_ref = sentence_data_group["word"][sentence_idx, 0]
-        word_obj = h5file[word_ref]
-    except Exception:
-        return None
-
-    if isinstance(word_obj, h5py.Group):
-        return _extract_words_from_group(h5file, sentence_text, word_obj)
+        if "word" in sent_group:
+            word_ref = sent_group["word"]
+            if isinstance(word_ref, h5py.Group):
+                word_group = word_ref
+            else:
+                # It's a dataset/ref — dereference it
+                try:
+                    word_group = h5file[word_ref[()]]
+                except Exception:
+                    word_group = None
     else:
         return None
 
+    if sentence_text is None or word_group is None:
+        return None
 
-def _extract_words_from_group(h5file, sentence_text, word_group):
-    """
-    Shared logic: extract word strings and EEG features from a word group.
-
-    Args:
-        h5file: Open h5py File object
-        sentence_text: The sentence string
-        word_group: HDF5 Group containing 'content', 'GD_t1', etc.
-
-    Returns:
-        dict or None
-    """
+    # --- Determine number of words ---
     if "content" not in word_group:
         return None
 
     word_content_refs = word_group["content"]
-    n_words = word_content_refs.shape[0] if len(word_content_refs.shape) == 1 else word_content_refs.shape[-1]
+    n_words = get_ref_count(word_content_refs)
 
     # --- Extract word strings ---
     words = []
     for i in range(n_words):
         try:
-            ref = word_content_refs[i] if len(word_content_refs.shape) == 1 else word_content_refs[0, i]
+            ref = get_ref_at(word_content_refs, i)
             word_str = h5_to_string(ref, h5file)
             words.append(word_str if word_str else "<UNK>")
         except Exception:
@@ -265,23 +263,15 @@ def _extract_words_from_group(h5file, sentence_text, word_group):
 
         for word_idx in range(n_words):
             try:
-                # Get reference for this word's band data
-                if len(band_data_refs.shape) == 1:
-                    ref = band_data_refs[word_idx]
-                else:
-                    ref = band_data_refs[0, word_idx]
-
+                ref = get_ref_at(band_data_refs, word_idx)
                 band_values = h5_to_array(ref, h5file)
 
                 if band_values is not None and band_values.size >= N_CHANNELS:
-                    # Take first N_CHANNELS values (should be 105)
                     channel_values = band_values.flatten()[:N_CHANNELS]
 
                     if len(channel_values) == N_CHANNELS and not np.all(np.isnan(channel_values)):
                         start_idx = band_idx * N_CHANNELS
                         end_idx = start_idx + N_CHANNELS
-
-                        # Replace NaNs within the vector with 0
                         channel_values = np.nan_to_num(channel_values, nan=0.0)
                         eeg_features[word_idx, start_idx:end_idx] = channel_values
                         has_fixation[word_idx] = True
@@ -289,7 +279,6 @@ def _extract_words_from_group(h5file, sentence_text, word_group):
             except Exception:
                 continue
 
-    # Check if we got any valid data at all
     if not np.any(has_fixation):
         return None
 
@@ -304,10 +293,6 @@ def _extract_words_from_group(h5file, sentence_text, word_group):
 def process_subject_file(filepath, subject_id, task_name):
     """
     Process a single subject's .mat file and extract all sentence data.
-
-    Handles both sentenceData layouts:
-      - Dataset: array of object references (each ref -> sentence group)
-      - Group: struct of arrays (each field is (N, 1) refs)
 
     Args:
         filepath: Path to the .mat file
@@ -330,11 +315,11 @@ def process_subject_file(filepath, subject_id, task_name):
             sentence_data = h5file["sentenceData"]
 
             if isinstance(sentence_data, h5py.Dataset):
-                # Layout A: Dataset of references
-                n_sentences = sentence_data.shape[-1] if len(sentence_data.shape) > 1 else sentence_data.shape[0]
+                # Array of references
+                n_sentences = get_ref_count(sentence_data)
 
                 for i in range(n_sentences):
-                    ref = sentence_data[0, i] if len(sentence_data.shape) > 1 else sentence_data[i]
+                    ref = get_ref_at(sentence_data, i)
                     result = extract_sentence_data(h5file, ref)
 
                     if result is not None:
@@ -343,23 +328,39 @@ def process_subject_file(filepath, subject_id, task_name):
                         samples.append(result)
 
             elif isinstance(sentence_data, h5py.Group):
-                # Layout B: Group (struct of arrays)
-                # Determine sentence count from 'content' field
-                if "content" in sentence_data:
-                    n_sentences = sentence_data["content"].shape[0]
-                elif "word" in sentence_data:
-                    n_sentences = sentence_data["word"].shape[0]
-                else:
-                    print(f"  WARNING: Cannot determine sentence count in {filepath}")
+                # Struct-array layout: sentenceData is a Group where each key
+                # is a field name (content, word, mean_a1, ...) and each field
+                # is a Dataset with one entry per sentence.
+                if "content" not in sentence_data or "word" not in sentence_data:
+                    print(f"  WARNING: sentenceData Group missing 'content' or 'word' in {filepath}")
                     return samples
 
-                for i in range(n_sentences):
-                    result = extract_sentence_data_from_group(h5file, sentence_data, i)
+                content_refs = sentence_data["content"]
+                word_refs = sentence_data["word"]
+                n_sentences = get_ref_count(content_refs)
 
-                    if result is not None:
-                        result["subject_id"] = subject_id
-                        result["task"] = task_name
-                        samples.append(result)
+                for i in range(n_sentences):
+                    try:
+                        # Get sentence text
+                        text_ref = get_ref_at(content_refs, i)
+                        sentence_text = h5_to_string(text_ref, h5file)
+
+                        # Get word-level data group
+                        word_ref = get_ref_at(word_refs, i)
+                        word_group = h5file[word_ref]
+
+                        result = extract_sentence_data(
+                            h5file,
+                            sentence_text=sentence_text,
+                            word_group=word_group,
+                        )
+
+                        if result is not None:
+                            result["subject_id"] = subject_id
+                            result["task"] = task_name
+                            samples.append(result)
+                    except Exception:
+                        continue
 
     except Exception as e:
         print(f"  ERROR processing {filepath}: {e}")
