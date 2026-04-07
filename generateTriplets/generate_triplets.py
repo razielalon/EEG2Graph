@@ -83,7 +83,7 @@ def extract_triplets_from_rebel_output(text):
     Parse REBEL's generated text into structured triplets.
 
     REBEL outputs text in the format:
-        <triplet> Subject Name <subj> Relation Type <rel> Object Name <obj> ...
+        <triplet> Subject <subj> Object <obj> Relation <triplet> ...
 
     Returns:
         List of dicts: [{"subject": str, "relation": str, "object": str}, ...]
@@ -96,19 +96,19 @@ def extract_triplets_from_rebel_output(text):
 
     for token in text.replace("<s>", "").replace("</s>", "").replace("<pad>", "").split():
         if token == "<triplet>":
-            if current and all(current.values()):
-                triplets.append(current)
-            current = {"subject": "", "relation": "", "object": ""}
-        elif token == "<subj>":
-            if current is not None:
-                current["_filling"] = "relation"
-        elif token == "<rel>":
-            if current is not None:
-                current["_filling"] = "object"
-        elif token == "<obj>":
+            # Finalize previous triplet if complete
             if current and all(v for k, v in current.items() if k != "_filling"):
                 triplets.append(current)
             current = {"subject": "", "relation": "", "object": ""}
+            current["_filling"] = "subject"
+        elif token == "<subj>":
+            # Subject is done, now filling object
+            if current is not None:
+                current["_filling"] = "object"
+        elif token == "<obj>":
+            # Object is done, now filling relation
+            if current is not None:
+                current["_filling"] = "relation"
         else:
             if current is not None:
                 filling = current.get("_filling", "subject")
