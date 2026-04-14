@@ -58,9 +58,21 @@ class EEGGraphDataset(Dataset):
             self.meta = json.load(f)
 
         # Index triplets by sentence text
+        # Supports both formats:
+        #   - list: [{"text": ..., "triplets": [...]}, ...]
+        #   - dict: {"sentence text": {"triplets": [...]}, ...}  (from generate_triplets.py)
         with open(triplets_path) as f:
             triplets_raw = json.load(f)
-        self.triplet_index = {e["text"].strip(): e.get("triplets", []) for e in triplets_raw}
+        if isinstance(triplets_raw, dict):
+            self.triplet_index = {
+                text.strip(): entry.get("triplets", [])
+                for text, entry in triplets_raw.items()
+            }
+        else:
+            self.triplet_index = {
+                e["text"].strip(): e.get("triplets", [])
+                for e in triplets_raw
+            }
 
         # Build aligned samples
         self.samples = []

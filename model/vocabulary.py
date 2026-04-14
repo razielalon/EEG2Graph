@@ -82,12 +82,14 @@ class Vocabulary:
     # ----- Build from triplets -----
 
     @classmethod
-    def build_from_triplets(cls, triplets_list, min_freq=1):
+    def build_from_triplets(cls, triplets_data, min_freq=1):
         """
-        Build vocabulary from a list of triplet entries.
+        Build vocabulary from triplet entries.
 
         Args:
-            triplets_list: list of {"text": ..., "triplets": [{"subject":..., "relation":..., "object":...}]}
+            triplets_data: Either:
+                - list of {"text": ..., "triplets": [{"subject":..., "relation":..., "object":...}]}
+                - dict of {sentence_text: {"triplets": [...]}}  (as produced by generate_triplets.py)
             min_freq: Minimum word frequency to include
 
         Returns:
@@ -96,7 +98,13 @@ class Vocabulary:
         vocab = cls()
         counter = Counter()
 
-        for entry in triplets_list:
+        # Normalize: accept both list-of-dicts and dict-of-dicts formats
+        if isinstance(triplets_data, dict):
+            entries = triplets_data.values()
+        else:
+            entries = triplets_data
+
+        for entry in entries:
             for triplet in entry.get("triplets", []):
                 for field in ["subject", "relation", "object"]:
                     tokens = triplet[field].split()

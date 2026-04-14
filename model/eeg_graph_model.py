@@ -202,15 +202,15 @@ class EEGGraphModel(nn.Module):
     # ---- Greedy Inference ----
 
     @torch.no_grad()
-    def generate(self, src, src_mask, max_len=128, temperature=1.0):
+    def generate(self, src, src_mask, max_len=128, temperature=0.0):
         """
-        Autoregressive greedy decoding.
+        Autoregressive decoding (greedy by default, sampling with temperature > 0).
 
         Args:
             src: (B, S, eeg_dim)
             src_mask: (B, S)
             max_len: Maximum tokens to generate
-            temperature: Sampling temperature (1.0 = greedy argmax)
+            temperature: 0.0 for greedy argmax, >0 for sampling
 
         Returns:
             generated: (B, max_len) token ID tensor
@@ -283,9 +283,8 @@ class EEGGraphModel(nn.Module):
             candidates.sort(key=lambda x: x[0], reverse=True)
             beams = candidates[:beam_size]
 
-            # Early stop if top beam ended
+            # Early stop if top beam ended (already in completed from the loop above)
             if beams[0][1][-1] == EOS_ID:
-                completed.append(beams[0])
                 break
 
         if completed:
