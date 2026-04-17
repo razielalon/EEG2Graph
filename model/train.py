@@ -191,6 +191,11 @@ def main(args):
     print("Loading data")
     print("=" * 60)
 
+    limits = {
+        "train": args.limit_train,
+        "val": args.limit_val,
+        "test": args.limit_test,
+    }
     loaders, tokenizer = build_dataloaders(
         args.processed_dir, args.triplets_path,
         batch_size=args.batch_size,
@@ -198,6 +203,7 @@ def main(args):
         max_tgt_len=args.max_tgt_len,
         num_workers=args.num_workers,
         bart_name=args.bart_name,
+        limits=limits,
     )
 
     tokenizer_dir = os.path.join(args.output_dir, "tokenizer")
@@ -237,7 +243,7 @@ def main(args):
     print("Training")
     print("=" * 60)
 
-    best_val_f1 = 0.0
+    best_val_f1 = -1.0  # ensure the first epoch always saves a checkpoint
     history = []
 
     for epoch in range(1, args.epochs + 1):
@@ -388,6 +394,12 @@ if __name__ == "__main__":
     parser.add_argument("--max_src_len", type=int, default=128)
     parser.add_argument("--max_tgt_len", type=int, default=128)
     parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument("--limit_train", type=int, default=0,
+                        help="If >0, use only the first N training samples (CPU sanity runs)")
+    parser.add_argument("--limit_val", type=int, default=0,
+                        help="If >0, use only the first N val samples")
+    parser.add_argument("--limit_test", type=int, default=0,
+                        help="If >0, use only the first N test samples")
 
     # Inference
     parser.add_argument("--beam_size", type=int, default=4,

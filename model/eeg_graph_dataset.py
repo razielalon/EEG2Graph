@@ -24,7 +24,7 @@ from functools import partial
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Subset
 
 from vocabulary import build_tokenizer, linearize_triplets
 
@@ -178,12 +178,17 @@ def build_dataloaders(
     num_workers=0,
     bart_name="facebook/bart-base",
     tokenizer=None,
+    limits=None,
 ):
     """
     Build train/val/test dataloaders and a tokenizer.
 
     If `tokenizer` is provided, reuse it (e.g., at inference time).
     Otherwise build a fresh one from `bart_name`.
+
+    `limits`: optional dict like {"train": 64, "val": 16, "test": 16}. Values
+    that are None or 0 leave the corresponding split at full size. Useful for
+    fast CPU sanity runs.
 
     Returns:
         dataloaders: dict of DataLoaders
@@ -193,6 +198,7 @@ def build_dataloaders(
         tokenizer = build_tokenizer(bart_name)
 
     collate = partial(collate_fn, pad_id=tokenizer.pad_token_id)
+    limits = limits or {}
 
     loaders = {}
     for split in ["train", "val", "test"]:
@@ -204,6 +210,12 @@ def build_dataloaders(
 
         print(f"\nLoading {split}:")
         ds = EEGGraphDataset(eeg_path, meta_path, triplets_path, tokenizer, max_src_len, max_tgt_len)
+
+        limit = limits.get(split)
+        if limit and limit < len(ds):
+            ds = Subset(ds, list(range(limit)))
+            print(f"  (subset to first {limit} samples)")
+
         loaders[split] = DataLoader(
             ds, batch_size=batch_size, shuffle=(split == "train"),
             collate_fn=collate, num_workers=num_workers, pin_memory=True,
