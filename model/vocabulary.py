@@ -1,233 +1,88 @@
 """
-EEG-to-Graph: Decoder Vocabulary
-=================================
+EEG-to-Graph: Tokenizer Helpers
+================================
 
-Manages the token vocabulary for the autoregressive triplet decoder.
-Uses REBEL-style linearization:
+Wraps a HuggingFace BART tokenizer with REBEL-style linearization:
 
-    <bos> <triplet> Barack Obama <subj> place of birth <rel> Hawaii <obj> <eos>
+    <s> <triplet> Barack Obama <subj> place of birth <rel> Hawaii <obj> </s>
 
-Multiple triplets per sentence are concatenated:
-    <bos> <triplet> subj1 <subj> rel1 <rel> obj1 <obj>
-          <triplet> subj2 <subj> rel2 <rel> obj2 <obj> <eos>
+`<s>` / `</s>` / `<pad>` come from BART; the four structural markers
+(`<triplet>`, `<subj>`, `<rel>`, `<obj>`) are added as special tokens.
 """
 
-import json
-from collections import Counter
+import os
+from transformers import AutoTokenizer
 
 
-# Special tokens for triplet structure
-SPECIAL_TOKENS = [
-    "<pad>",      # 0 — padding
-    "<bos>",      # 1 — beginning of sequence
-    "<eos>",      # 2 — end of sequence
-    "<unk>",      # 3 — unknown word
-    "<triplet>",  # 4 — triplet boundary marker
-    "<subj>",     # 5 — end of subject, start of relation
-    "<rel>",      # 6 — end of relation, start of object
-    "<obj>",      # 7 — end of object
-]
-
-PAD_ID = 0
-BOS_ID = 1
-EOS_ID = 2
-UNK_ID = 3
+STRUCT_TOKENS = ["<triplet>", "<subj>", "<rel>", "<obj>"]
 
 
-class Vocabulary:
+def build_tokenizer(model_name="facebook/bart-base"):
+    """Load a BART tokenizer and register the structural marker tokens."""
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer.add_tokens(STRUCT_TOKENS, special_tokens=True)
+    return tokenizer
+
+
+def _triplets_to_string(triplets):
+    parts = []
+    for t in triplets:
+        parts.append(
+            f"<triplet> {t['subject'].strip()} "
+            f"<subj> {t['relation'].strip()} "
+            f"<rel> {t['object'].strip()} <obj>"
+        )
+    return " ".join(parts)
+
+
+def linearize_triplets(triplets, tokenizer):
     """
-    Word-level vocabulary for the triplet decoder.
+    Convert triplet dicts to a BART token ID sequence.
 
-    Built from the ground-truth triplets in the training set.
-    All subject/relation/object words are included.
+    Empty triplets yield just [<s>, </s>].
     """
+    text = _triplets_to_string(triplets)
+    return tokenizer(text, add_special_tokens=True)["input_ids"]
 
-    def __init__(self):
-        self.token2id = {}
-        self.id2token = {}
-        self._frozen = False
 
-        # Add special tokens first
-        for tok in SPECIAL_TOKENS:
-            self._add(tok)
+def delinearize(token_ids, tokenizer):
+    """
+    Convert a BART token ID sequence back into triplet dicts.
 
-    def _add(self, token):
-        if token not in self.token2id:
-            idx = len(self.token2id)
-            self.token2id[token] = idx
-            self.id2token[idx] = token
-        return self.token2id[token]
+    Robust to partial/malformed output — decodes to a string and parses
+    the structural markers, extracting as many well-formed triplets as
+    possible.
+    """
+    if hasattr(token_ids, "tolist"):
+        token_ids = token_ids.tolist()
 
-    def add(self, token):
-        """Add a token (only if vocabulary is not frozen)."""
-        if self._frozen and token not in self.token2id:
-            return UNK_ID
-        return self._add(token)
+    text = tokenizer.decode(token_ids, skip_special_tokens=False)
+    for marker in (tokenizer.bos_token, tokenizer.eos_token, tokenizer.pad_token):
+        if marker:
+            text = text.replace(marker, " ")
 
-    def freeze(self):
-        self._frozen = True
+    triplets = []
+    chunks = text.split("<triplet>")
+    for chunk in chunks[1:]:
+        if "<subj>" not in chunk or "<rel>" not in chunk or "<obj>" not in chunk:
+            continue
+        subj, rest = chunk.split("<subj>", 1)
+        rel, rest = rest.split("<rel>", 1)
+        obj, _ = rest.split("<obj>", 1)
 
-    def encode(self, token):
-        return self.token2id.get(token, UNK_ID)
+        subj = subj.strip()
+        rel = rel.strip()
+        obj = obj.strip()
+        if subj and rel and obj:
+            triplets.append({"subject": subj, "relation": rel, "object": obj})
 
-    def decode(self, idx):
-        return self.id2token.get(idx, "<unk>")
+    return triplets
 
-    def __len__(self):
-        return len(self.token2id)
 
-    def __contains__(self, token):
-        return token in self.token2id
+def save_tokenizer(tokenizer, directory):
+    os.makedirs(directory, exist_ok=True)
+    tokenizer.save_pretrained(directory)
 
-    # ----- Build from triplets -----
 
-    @classmethod
-    def build_from_triplets(cls, triplets_data, min_freq=1):
-        """
-        Build vocabulary from triplet entries.
-
-        Args:
-            triplets_data: Either:
-                - list of {"text": ..., "triplets": [{"subject":..., "relation":..., "object":...}]}
-                - dict of {sentence_text: {"triplets": [...]}}  (as produced by generate_triplets.py)
-            min_freq: Minimum word frequency to include
-
-        Returns:
-            Vocabulary instance
-        """
-        vocab = cls()
-        counter = Counter()
-
-        # Normalize: accept both list-of-dicts and dict-of-dicts formats
-        if isinstance(triplets_data, dict):
-            entries = triplets_data.values()
-        else:
-            entries = triplets_data
-
-        for entry in entries:
-            for triplet in entry.get("triplets", []):
-                for field in ["subject", "relation", "object"]:
-                    tokens = triplet[field].split()
-                    counter.update(tokens)
-
-        for token, freq in counter.items():
-            if freq >= min_freq:
-                vocab.add(token)
-
-        print(f"  Vocabulary: {len(vocab)} tokens "
-              f"({len(SPECIAL_TOKENS)} special + {len(vocab) - len(SPECIAL_TOKENS)} words)")
-        return vocab
-
-    # ----- Linearization -----
-
-    def linearize_triplets(self, triplets):
-        """
-        Convert a list of triplet dicts to a token ID sequence.
-
-        Input:
-            [{"subject": "Barack Obama", "relation": "place of birth", "object": "Hawaii"}]
-
-        Output token sequence:
-            <bos> <triplet> Barack Obama <subj> place of birth <rel> Hawaii <obj> <eos>
-
-        Returns:
-            list of token IDs
-        """
-        ids = [BOS_ID]
-
-        for triplet in triplets:
-            ids.append(self.encode("<triplet>"))
-
-            for word in triplet["subject"].split():
-                ids.append(self.encode(word))
-            ids.append(self.encode("<subj>"))
-
-            for word in triplet["relation"].split():
-                ids.append(self.encode(word))
-            ids.append(self.encode("<rel>"))
-
-            for word in triplet["object"].split():
-                ids.append(self.encode(word))
-            ids.append(self.encode("<obj>"))
-
-        ids.append(EOS_ID)
-        return ids
-
-    def delinearize(self, token_ids):
-        """
-        Convert a token ID sequence back to a list of triplet dicts.
-
-        Robust to partial/malformed outputs — extracts as many valid
-        triplets as possible.
-
-        Returns:
-            list of {"subject": str, "relation": str, "object": str}
-        """
-        tokens = [self.decode(i) for i in token_ids]
-        triplets = []
-
-        # State machine: look for <triplet> ... <subj> ... <rel> ... <obj>
-        i = 0
-        while i < len(tokens):
-            if tokens[i] == "<triplet>":
-                subj_tokens = []
-                rel_tokens = []
-                obj_tokens = []
-                i += 1
-
-                # Collect subject tokens until <subj>
-                while i < len(tokens) and tokens[i] not in SPECIAL_TOKENS:
-                    subj_tokens.append(tokens[i])
-                    i += 1
-                if i < len(tokens) and tokens[i] == "<subj>":
-                    i += 1
-                else:
-                    continue
-
-                # Collect relation tokens until <rel>
-                while i < len(tokens) and tokens[i] not in SPECIAL_TOKENS:
-                    rel_tokens.append(tokens[i])
-                    i += 1
-                if i < len(tokens) and tokens[i] == "<rel>":
-                    i += 1
-                else:
-                    continue
-
-                # Collect object tokens until <obj>
-                while i < len(tokens) and tokens[i] not in SPECIAL_TOKENS:
-                    obj_tokens.append(tokens[i])
-                    i += 1
-                if i < len(tokens) and tokens[i] == "<obj>":
-                    i += 1
-
-                if subj_tokens and rel_tokens and obj_tokens:
-                    triplets.append({
-                        "subject": " ".join(subj_tokens),
-                        "relation": " ".join(rel_tokens),
-                        "object": " ".join(obj_tokens),
-                    })
-            elif tokens[i] == "<eos>":
-                break
-            else:
-                i += 1
-
-        return triplets
-
-    # ----- Persistence -----
-
-    def save(self, path):
-        with open(path, "w") as f:
-            json.dump({
-                "token2id": self.token2id,
-                "special_tokens": SPECIAL_TOKENS,
-            }, f, indent=2)
-
-    @classmethod
-    def load(cls, path):
-        vocab = cls.__new__(cls)
-        with open(path) as f:
-            data = json.load(f)
-        vocab.token2id = data["token2id"]
-        vocab.id2token = {int(v): k for k, v in vocab.token2id.items()}
-        vocab._frozen = True
-        return vocab
+def load_tokenizer(directory):
+    return AutoTokenizer.from_pretrained(directory)

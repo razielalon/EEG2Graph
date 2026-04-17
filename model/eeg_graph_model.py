@@ -1,294 +1,110 @@
 """
-EEG-to-Graph: Generative Model
-================================
+EEG-to-Graph: Generative Model (Bridge + BART)
+===============================================
 
-Encoder-Decoder Transformer that translates EEG word-level features
-into linearized knowledge graph triplets.
-
-    Encoder: EEG (batch, src_len, 840) → hidden (batch, src_len, d_model)
-    Decoder: Autoregressive, cross-attends to encoder output,
-             generates <bos> <triplet> subj <subj> rel <rel> obj <obj> ... <eos>
-
-Architecture:
+Wraps a pretrained `facebook/bart-base` with a Bridge projection that
+maps EEG word-level features (batch, src_len, 840) into BART's encoder
+embedding space (d_model=768). The structured triplet output format
+(`<triplet> subj <subj> rel <rel> obj <obj>`) is preserved — the four
+markers are registered as special tokens on the tokenizer, and
+`resize_token_embeddings` extends BART's embedding table accordingly.
 
     ┌──────────────┐        ┌──────────────────┐
     │  EEG Input   │        │  Target Tokens   │
-    │ (B, L, 840)  │        │  (shifted right)  │
+    │ (B, L, 840)  │        │  (shifted right) │
     └──────┬───────┘        └────────┬─────────┘
            │                         │
-    ┌──────▼───────┐        ┌────────▼─────────┐
-    │  Projection  │        │ Token Embedding  │
-    │  + PosEmbed  │        │   + PosEmbed     │
-    └──────┬───────┘        └────────┬─────────┘
+    ┌──────▼───────┐                 │
+    │    Bridge    │                 │
+    │ 840 → 768 +  │                 │
+    │ LN+GELU+DO   │                 │
+    └──────┬───────┘                 │
            │                         │
-    ┌──────▼───────┐        ┌────────▼─────────┐
-    │  Transformer │ ──────►│   Transformer    │
-    │   Encoder    │ cross  │     Decoder      │
-    │  (N layers)  │ attn   │   (N layers)     │
-    └──────────────┘        └────────┬─────────┘
-                                     │
-                            ┌────────▼─────────┐
-                            │   Output Linear  │
-                            │   → vocab logits │
-                            └──────────────────┘
+           │   inputs_embeds         │
+           ▼                         ▼
+    ┌─────────────────────────────────────────┐
+    │   BartForConditionalGeneration          │
+    │   (encoder + decoder + lm_head)         │
+    └─────────────────────────────────────────┘
+                       │
+                       ▼
+                 (B, T, vocab)
 """
 
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from vocabulary import PAD_ID, BOS_ID, EOS_ID
+from transformers import BartForConditionalGeneration
 
 
-class EEGGraphModel(nn.Module):
+class EEGBartModel(nn.Module):
     """
-    Encoder-Decoder Transformer for EEG → triplet generation.
+    Bridge + BART encoder-decoder for EEG → triplet generation.
 
     Args:
-        vocab_size: Decoder vocabulary size
-        eeg_dim: Input EEG feature dim (840 for ZuCo)
-        d_model: Transformer hidden dimension
-        n_heads: Number of attention heads
-        n_enc_layers: Encoder Transformer layers
-        n_dec_layers: Decoder Transformer layers
-        max_src_len: Max encoder sequence length
-        max_tgt_len: Max decoder sequence length
-        dropout: Dropout rate
+        tokenizer: BART tokenizer with structural tokens already added
+        eeg_dim:   Input EEG feature dim (840 for ZuCo)
+        bart_name: HuggingFace model name (default "facebook/bart-base")
+        dropout:   Dropout rate applied inside the Bridge projection
     """
 
-    def __init__(
-        self,
-        vocab_size,
-        eeg_dim=840,
-        d_model=256,
-        n_heads=8,
-        n_enc_layers=4,
-        n_dec_layers=4,
-        max_src_len=128,
-        max_tgt_len=128,
-        dropout=0.3,
-    ):
+    def __init__(self, tokenizer, eeg_dim=840, bart_name="facebook/bart-base", dropout=0.3):
         super().__init__()
-        self.d_model = d_model
-        self.vocab_size = vocab_size
+        self.bart_name = bart_name
+        self.pad_token_id = tokenizer.pad_token_id
 
-        # ---- Encoder ----
-        self.enc_proj = nn.Sequential(
+        self.bart = BartForConditionalGeneration.from_pretrained(bart_name)
+        self.bart.resize_token_embeddings(len(tokenizer))
+
+        d_model = self.bart.config.d_model
+        self.bridge = nn.Sequential(
             nn.Linear(eeg_dim, d_model),
             nn.LayerNorm(d_model),
             nn.GELU(),
             nn.Dropout(dropout),
         )
-        self.enc_pos = nn.Embedding(max_src_len, d_model)
-
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model, nhead=n_heads,
-            dim_feedforward=d_model * 4, dropout=dropout,
-            activation="gelu", batch_first=True, norm_first=True,
-        )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_enc_layers)
-
-        # ---- Decoder ----
-        self.dec_embed = nn.Embedding(vocab_size, d_model, padding_idx=PAD_ID)
-        self.dec_pos = nn.Embedding(max_tgt_len, d_model)
-
-        decoder_layer = nn.TransformerDecoderLayer(
-            d_model=d_model, nhead=n_heads,
-            dim_feedforward=d_model * 4, dropout=dropout,
-            activation="gelu", batch_first=True, norm_first=True,
-        )
-        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=n_dec_layers)
-
-        # ---- Output head ----
-        self.output_proj = nn.Linear(d_model, vocab_size)
-
-        # Weight tying: share decoder embedding and output projection
-        self.output_proj.weight = self.dec_embed.weight
-
-        self.dropout = nn.Dropout(dropout)
-        self._init_weights()
-
-    def _init_weights(self):
-        for p in self.parameters():
-            if p.dim() > 1 and p.requires_grad:
-                nn.init.xavier_uniform_(p)
-        # Re-init embeddings
-        nn.init.normal_(self.dec_embed.weight, std=0.02)
-        nn.init.zeros_(self.dec_embed.weight[PAD_ID])
-        nn.init.normal_(self.enc_pos.weight, std=0.02)
-        nn.init.normal_(self.dec_pos.weight, std=0.02)
-
-    # ---- Encoder ----
-
-    def encode(self, src, src_mask=None):
-        """
-        Encode EEG features.
-
-        Args:
-            src: (B, S, eeg_dim)
-            src_mask: (B, S) — True for real tokens
-
-        Returns:
-            memory: (B, S, d_model)
-            memory_key_padding_mask: (B, S) — True for pad positions
-        """
-        B, S, _ = src.shape
-        h = self.enc_proj(src)
-        positions = torch.arange(S, device=src.device).unsqueeze(0)
-        h = h + self.enc_pos(positions)
-        h = self.dropout(h)
-
-        pad_mask = ~src_mask if src_mask is not None else None
-        memory = self.encoder(h, src_key_padding_mask=pad_mask)
-
-        return memory, pad_mask
-
-    # ---- Decoder ----
-
-    @staticmethod
-    def _causal_mask(sz, device):
-        """Generate upper-triangular causal mask."""
-        return torch.triu(torch.ones(sz, sz, device=device, dtype=torch.bool), diagonal=1)
-
-    def decode(self, tgt_ids, memory, memory_key_padding_mask=None):
-        """
-        Decode target token sequence with cross-attention to encoder memory.
-
-        Args:
-            tgt_ids: (B, T) token IDs
-            memory: (B, S, d_model) encoder output
-            memory_key_padding_mask: (B, S)
-
-        Returns:
-            logits: (B, T, vocab_size)
-        """
-        B, T = tgt_ids.shape
-        h = self.dec_embed(tgt_ids)
-        positions = torch.arange(T, device=tgt_ids.device).unsqueeze(0)
-        h = h + self.dec_pos(positions)
-        h = self.dropout(h)
-
-        causal = self._causal_mask(T, tgt_ids.device)
-        tgt_pad = (tgt_ids == PAD_ID)
-
-        h = self.decoder(
-            h, memory,
-            tgt_mask=causal,
-            tgt_key_padding_mask=tgt_pad,
-            memory_key_padding_mask=memory_key_padding_mask,
-        )
-
-        return self.output_proj(h)
-
-    # ---- Forward (training) ----
 
     def forward(self, src, src_mask, tgt):
         """
-        Full forward pass for training with teacher forcing.
+        Teacher-forced forward pass.
 
         Args:
-            src: (B, S, eeg_dim) — EEG features
-            src_mask: (B, S) — True for real tokens
-            tgt: (B, T) — decoder input token IDs (shifted right)
+            src:      (B, S, eeg_dim) — EEG features
+            src_mask: (B, S) bool — True for real tokens
+            tgt:      (B, T) — decoder input token IDs (shifted right)
 
         Returns:
             logits: (B, T, vocab_size)
         """
-        memory, mem_pad = self.encode(src, src_mask)
-        logits = self.decode(tgt, memory, mem_pad)
-        return logits
-
-    # ---- Greedy Inference ----
-
-    @torch.no_grad()
-    def generate(self, src, src_mask, max_len=128, temperature=0.0):
-        """
-        Autoregressive decoding (greedy by default, sampling with temperature > 0).
-
-        Args:
-            src: (B, S, eeg_dim)
-            src_mask: (B, S)
-            max_len: Maximum tokens to generate
-            temperature: 0.0 for greedy argmax, >0 for sampling
-
-        Returns:
-            generated: (B, max_len) token ID tensor
-        """
-        B = src.size(0)
-        device = src.device
-
-        memory, mem_pad = self.encode(src, src_mask)
-
-        # Start with <bos>
-        generated = torch.full((B, 1), BOS_ID, dtype=torch.long, device=device)
-
-        for _ in range(max_len - 1):
-            logits = self.decode(generated, memory, mem_pad)  # (B, T, V)
-            next_logits = logits[:, -1, :]  # (B, V)
-
-            if temperature <= 0:
-                next_token = next_logits.argmax(dim=-1, keepdim=True)
-            else:
-                probs = F.softmax(next_logits / temperature, dim=-1)
-                next_token = torch.multinomial(probs, 1)
-
-            generated = torch.cat([generated, next_token], dim=1)
-
-            # Stop if all sequences have produced <eos>
-            if (next_token.squeeze(-1) == EOS_ID).all():
-                break
-
-        return generated
-
-    # ---- Beam Search ----
+        inputs_embeds = self.bridge(src)
+        out = self.bart(
+            inputs_embeds=inputs_embeds,
+            attention_mask=src_mask.long(),
+            decoder_input_ids=tgt,
+            use_cache=False,
+        )
+        return out.logits
 
     @torch.no_grad()
-    def beam_search(self, src, src_mask, beam_size=4, max_len=128):
+    def generate(self, src, src_mask, max_len=128, num_beams=1):
         """
-        Beam search decoding (single sample, B=1).
+        Autoregressive decoding via BART. num_beams=1 = greedy, >1 = beam.
 
         Returns:
-            best_seq: (seq_len,) token ID tensor — best hypothesis
+            generated: (B, gen_len) token ID tensor
         """
-        assert src.size(0) == 1, "Beam search operates on single samples"
-        device = src.device
+        inputs_embeds = self.bridge(src)
+        return self.bart.generate(
+            inputs_embeds=inputs_embeds,
+            attention_mask=src_mask.long(),
+            max_length=max_len,
+            num_beams=num_beams,
+            early_stopping=num_beams > 1,
+            decoder_start_token_id=self.bart.config.decoder_start_token_id,
+        )
 
-        memory, mem_pad = self.encode(src, src_mask)
-
-        # Each beam: (log_prob, token_ids list)
-        beams = [(0.0, [BOS_ID])]
-        completed = []
-
-        for _ in range(max_len):
-            candidates = []
-
-            for score, seq in beams:
-                if seq[-1] == EOS_ID:
-                    completed.append((score, seq))
-                    continue
-
-                tgt = torch.tensor([seq], dtype=torch.long, device=device)
-                logits = self.decode(tgt, memory, mem_pad)
-                log_probs = F.log_softmax(logits[0, -1], dim=-1)
-
-                topk_lp, topk_ids = log_probs.topk(beam_size)
-                for lp, tid in zip(topk_lp.tolist(), topk_ids.tolist()):
-                    candidates.append((score + lp, seq + [tid]))
-
-            if not candidates:
-                break
-
-            # Keep top-k beams
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            beams = candidates[:beam_size]
-
-            # Early stop if top beam ended (already in completed from the loop above)
-            if beams[0][1][-1] == EOS_ID:
-                break
-
-        if completed:
-            completed.sort(key=lambda x: x[0] / len(x[1]), reverse=True)  # length-normalized
-            return torch.tensor(completed[0][1], device=device)
-        else:
-            return torch.tensor(beams[0][1], device=device)
+    def param_groups(self, bridge_lr, bart_lr, weight_decay):
+        """Differential learning rates: high for Bridge, low for BART."""
+        return [
+            {"params": self.bridge.parameters(), "lr": bridge_lr, "weight_decay": weight_decay},
+            {"params": self.bart.parameters(),   "lr": bart_lr,   "weight_decay": weight_decay},
+        ]
