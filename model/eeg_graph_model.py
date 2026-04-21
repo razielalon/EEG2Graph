@@ -17,8 +17,8 @@ needed.
            │                         │
     ┌──────▼───────┐                 │
     │    Bridge    │                 │
-    │ 840 → 768 +  │                 │
-    │ LN+GELU+DO   │                 │
+    │  840 → 1024  │                 │
+    │    LN+DO     │                 │
     └──────┬───────┘                 │
            │                         │
            │   inputs_embeds         │
@@ -63,7 +63,6 @@ class EEGBartModel(nn.Module):
         self.bridge = nn.Sequential(
             nn.Linear(eeg_dim, d_model),
             nn.LayerNorm(d_model),
-            nn.GELU(),
             nn.Dropout(dropout),
         )
 
