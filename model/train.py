@@ -222,6 +222,10 @@ def main(args):
         dropout=args.dropout,
     ).to(device)
 
+    if args.freeze_bart:
+        model.freeze_bart()
+        print("  BART/REBEL frozen — training bridge only.")
+
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     n_bridge = sum(p.numel() for p in model.bridge.parameters() if p.requires_grad)
     print(f"  Trainable params: {n_params:,} (bridge: {n_bridge:,}, bart: {n_params - n_bridge:,})")
@@ -266,6 +270,7 @@ def main(args):
         elapsed = time.time() - t0
         lrs = [pg["lr"] for pg in optimizer.param_groups]
 
+        bart_lr_log = lrs[1] if len(lrs) > 1 else 0.0
         log = {
             "epoch": epoch,
             "train_loss": train_loss,
@@ -274,7 +279,7 @@ def main(args):
             "val_precision": val_metrics.get("precision", 0),
             "val_recall": val_metrics.get("recall", 0),
             "lr_bridge": lrs[0],
-            "lr_bart": lrs[1] if len(lrs) > 1 else lrs[0],
+            "lr_bart": bart_lr_log,
             "time": elapsed,
         }
         history.append(log)
@@ -284,7 +289,7 @@ def main(args):
               f"val_loss={val_metrics.get('loss', 0):.4f} | "
               f"val_F1={val_metrics.get('f1', 0):.4f} "
               f"(P={val_metrics.get('precision', 0):.3f} R={val_metrics.get('recall', 0):.3f}) | "
-              f"lr=[{lrs[0]:.2e}, {lrs[1]:.2e}] | {elapsed:.1f}s")
+              f"lr=[{lrs[0]:.2e}, {bart_lr_log:.2e}] | {elapsed:.1f}s")
 
         # Checkpoint best
         if val_metrics.get("f1", 0) > best_val_f1:
@@ -373,8 +378,9 @@ if __name__ == "__main__":
                         help="Where to save checkpoints and results")
 
     # Model
-    parser.add_argument("--bart_name", type=str, default="facebook/bart-base",
-                        help="HuggingFace BART model name")
+    parser.add_argument("--bart_name", type=str, default="Babelscape/rebel-large",
+                        help="HuggingFace model name (default: REBEL, a BART-large "
+                             "checkpoint already fine-tuned for relation extraction)")
     parser.add_argument("--eeg_dim", type=int, default=840)
     parser.add_argument("--dropout", type=float, default=0.3)
 
@@ -385,6 +391,9 @@ if __name__ == "__main__":
                         help="Learning rate for the Bridge projection")
     parser.add_argument("--bart_lr", type=float, default=3e-5,
                         help="Learning rate for BART (much lower — mostly frozen)")
+    parser.add_argument("--freeze_bart", action="store_true",
+                        help="Freeze BART/REBEL entirely and train only the bridge. "
+                             "Recommended for CPU runs and small-data regimes.")
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--grad_clip", type=float, default=1.0)
     parser.add_argument("--label_smoothing", type=float, default=0.1)

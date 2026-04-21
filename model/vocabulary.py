@@ -2,26 +2,30 @@
 EEG-to-Graph: Tokenizer Helpers
 ================================
 
-Wraps a HuggingFace BART tokenizer with REBEL-style linearization:
+Wraps the REBEL (Babelscape/rebel-large) tokenizer. REBEL is BART-large
+already fine-tuned for end-to-end relation extraction, and it ships with
+the structural markers (`<triplet>`, `<subj>`, `<obj>`) as native tokens.
+We therefore reuse its native linearization format:
 
-    <s> <triplet> Barack Obama <subj> place of birth <rel> Hawaii <obj> </s>
+    <s> <triplet> Barack Obama <subj> Hawaii <obj> place of birth </s>
 
-`<s>` / `</s>` / `<pad>` come from BART; the four structural markers
-(`<triplet>`, `<subj>`, `<rel>`, `<obj>`) are added as special tokens.
+Subject first, then object, then relation — no `<rel>` marker. This
+matches REBEL's pretraining so the decoder already knows the grammar.
 """
 
 import os
 from transformers import AutoTokenizer
 
 
-STRUCT_TOKENS = ["<triplet>", "<subj>", "<rel>", "<obj>"]
+# Native to REBEL's vocab — no add_tokens needed.
+STRUCT_TOKENS = ["<triplet>", "<subj>", "<obj>"]
+
+DEFAULT_MODEL_NAME = "Babelscape/rebel-large"
 
 
-def build_tokenizer(model_name="facebook/bart-base"):
-    """Load a BART tokenizer and register the structural marker tokens."""
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.add_tokens(STRUCT_TOKENS, special_tokens=True)
-    return tokenizer
+def build_tokenizer(model_name=DEFAULT_MODEL_NAME):
+    """Load the REBEL tokenizer (structural tokens are already in vocab)."""
+    return AutoTokenizer.from_pretrained(model_name)
 
 
 def _triplets_to_string(triplets):
@@ -29,15 +33,15 @@ def _triplets_to_string(triplets):
     for t in triplets:
         parts.append(
             f"<triplet> {t['subject'].strip()} "
-            f"<subj> {t['relation'].strip()} "
-            f"<rel> {t['object'].strip()} <obj>"
+            f"<subj> {t['object'].strip()} "
+            f"<obj> {t['relation'].strip()}"
         )
     return " ".join(parts)
 
 
 def linearize_triplets(triplets, tokenizer):
     """
-    Convert triplet dicts to a BART token ID sequence.
+    Convert triplet dicts to a REBEL-style token ID sequence.
 
     Empty triplets yield just [<s>, </s>].
     """
@@ -47,11 +51,10 @@ def linearize_triplets(triplets, tokenizer):
 
 def delinearize(token_ids, tokenizer):
     """
-    Convert a BART token ID sequence back into triplet dicts.
+    Parse a REBEL-style token ID sequence back into triplet dicts.
 
-    Robust to partial/malformed output — decodes to a string and parses
-    the structural markers, extracting as many well-formed triplets as
-    possible.
+    Robust to partial/malformed output — decodes to a string and walks
+    the structural markers in their native order: subject, object, relation.
     """
     if hasattr(token_ids, "tolist"):
         token_ids = token_ids.tolist()
@@ -64,15 +67,18 @@ def delinearize(token_ids, tokenizer):
     triplets = []
     chunks = text.split("<triplet>")
     for chunk in chunks[1:]:
-        if "<subj>" not in chunk or "<rel>" not in chunk or "<obj>" not in chunk:
+        if "<subj>" not in chunk or "<obj>" not in chunk:
             continue
         subj, rest = chunk.split("<subj>", 1)
-        rel, rest = rest.split("<rel>", 1)
-        obj, _ = rest.split("<obj>", 1)
+        obj, rel_rest = rest.split("<obj>", 1)
+
+        # Relation runs until the next <triplet> (already handled by outer split)
+        # or end of string. Strip any trailing structural noise.
+        rel = rel_rest.split("<triplet>")[0]
 
         subj = subj.strip()
-        rel = rel.strip()
         obj = obj.strip()
+        rel = rel.strip()
         if subj and rel and obj:
             triplets.append({"subject": subj, "relation": rel, "object": obj})
 

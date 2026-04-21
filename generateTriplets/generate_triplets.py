@@ -41,13 +41,14 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 REBEL_MODEL = "Babelscape/rebel-large"
 
-# Special tokens for linearized output format
-# Format: <triplet> subject <subj> relation <rel> object <obj>
-# Multiple triplets are concatenated, each starting with <triplet>
+# Special tokens for linearized output format — REBEL native format.
+# Format: <triplet> subject <subj> object <obj> relation
+# Multiple triplets are concatenated, each starting with <triplet>.
+# Note: there is NO <rel> marker — relation comes last, delimited only by
+# the next <triplet> or end-of-sequence. This matches REBEL's pretraining.
 SPECIAL_TOKENS = {
     "triplet_start": "<triplet>",
     "subject": "<subj>",
-    "relation": "<rel>",
     "object": "<obj>",
     "none": "<none>",  # For sentences with no extractable triplets
 }
@@ -193,7 +194,8 @@ def linearize_triplets(triplets):
     """
     Convert a list of triplet dicts into a linearized target string.
 
-    Format: <triplet> subject <subj> relation <rel> object <obj> <triplet> ...
+    Format: <triplet> subject <subj> object <obj> relation <triplet> ...
+    (REBEL's native S-O-R order; must stay in sync with model/vocabulary.py)
 
     If no triplets, returns "<none>".
     """
@@ -205,8 +207,8 @@ def linearize_triplets(triplets):
         parts.append(
             f"{SPECIAL_TOKENS['triplet_start']} "
             f"{t['subject']} {SPECIAL_TOKENS['subject']} "
-            f"{t['relation']} {SPECIAL_TOKENS['relation']} "
-            f"{t['object']} {SPECIAL_TOKENS['object']}"
+            f"{t['object']} {SPECIAL_TOKENS['object']} "
+            f"{t['relation']}"
         )
 
     return " ".join(parts)

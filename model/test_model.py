@@ -55,8 +55,10 @@ SAMPLE_TRIPLETS_DICT = {
 }
 
 
-# Module-level tokenizer so we don't re-download for every test.
+# Module-level tokenizer + model so we don't re-download REBEL per test.
+# REBEL is BART-large (~1.6GB) — loading it once keeps tests reasonable.
 _TOKENIZER = None
+_MODEL = None
 
 
 def get_tokenizer():
@@ -64,6 +66,14 @@ def get_tokenizer():
     if _TOKENIZER is None:
         _TOKENIZER = build_tokenizer()
     return _TOKENIZER
+
+
+def get_model():
+    global _MODEL
+    if _MODEL is None:
+        _MODEL = EEGBartModel(get_tokenizer(), eeg_dim=840, dropout=0.0)
+        _MODEL.eval()
+    return _MODEL
 
 
 def make_test_data(tmpdir, triplets_format="dict"):
@@ -111,11 +121,16 @@ def make_test_data(tmpdir, triplets_format="dict"):
 # =============================================================================
 
 def test_tokenizer_has_struct_tokens():
-    """Tokenizer knows about the four structural marker tokens."""
+    """Tokenizer knows about REBEL's native structural marker tokens."""
     tok = get_tokenizer()
+    assert STRUCT_TOKENS == ["<triplet>", "<subj>", "<obj>"], \
+        f"Expected REBEL's 3 structural tokens, got {STRUCT_TOKENS}"
     for marker in STRUCT_TOKENS:
         ids = tok(marker, add_special_tokens=False)["input_ids"]
         assert len(ids) == 1, f"{marker} should tokenize to a single ID, got {ids}"
+    # <rel> is NOT a REBEL token — make sure we didn't accidentally re-add it.
+    rel_ids = tok("<rel>", add_special_tokens=False)["input_ids"]
+    assert len(rel_ids) > 1, "<rel> should not be a single token in REBEL's vocab"
     print("  PASS: test_tokenizer_has_struct_tokens")
 
 
@@ -127,6 +142,13 @@ def test_linearize_delinearize_roundtrip():
 
     assert ids[0] == tok.bos_token_id
     assert ids[-1] == tok.eos_token_id
+
+    # REBEL format: subject comes before object, relation comes last.
+    decoded = tok.decode(ids, skip_special_tokens=False)
+    assert decoded.index("Barack Obama") < decoded.index("Hawaii"), \
+        "subject should precede object in REBEL's linearization"
+    assert decoded.index("Hawaii") < decoded.index("place of birth"), \
+        "object should precede relation in REBEL's linearization"
 
     recovered = delinearize(ids, tok)
     assert len(recovered) == len(triplets), f"expected {len(triplets)}, got {len(recovered)}"
@@ -259,8 +281,7 @@ def test_build_dataloaders_with_real_data():
 
 def test_model_forward():
     tok = get_tokenizer()
-    model = EEGBartModel(tok, eeg_dim=840, dropout=0.0)
-    model.eval()
+    model = get_model()
 
     B, S, T = 2, 10, 8
     src = torch.randn(B, S, 840)
@@ -273,9 +294,7 @@ def test_model_forward():
 
 
 def test_model_generate_greedy():
-    tok = get_tokenizer()
-    model = EEGBartModel(tok, eeg_dim=840, dropout=0.0)
-    model.eval()
+    model = get_model()
 
     src = torch.randn(1, 5, 840)
     src_mask = torch.ones(1, 5, dtype=torch.bool)
@@ -287,9 +306,7 @@ def test_model_generate_greedy():
 
 
 def test_model_generate_beam():
-    tok = get_tokenizer()
-    model = EEGBartModel(tok, eeg_dim=840, dropout=0.0)
-    model.eval()
+    model = get_model()
 
     src = torch.randn(1, 5, 840)
     src_mask = torch.ones(1, 5, dtype=torch.bool)
@@ -300,9 +317,29 @@ def test_model_generate_beam():
     print("  PASS: test_model_generate_beam")
 
 
-def test_model_param_groups():
+def test_model_uses_rebel_dim():
+    """Bridge output should match REBEL's d_model (1024 for BART-large)."""
+    model = get_model()
+    bridge_out = model.bridge[0].out_features
+    assert bridge_out == model.bart.config.d_model, \
+        f"Bridge out ({bridge_out}) != BART d_model ({model.bart.config.d_model})"
+    # REBEL is BART-large, so d_model=1024.
+    assert model.bart.config.d_model == 1024, \
+        f"Expected REBEL d_model=1024, got {model.bart.config.d_model}"
+    print("  PASS: test_model_uses_rebel_dim")
+
+
+def test_no_embedding_resize_needed():
+    """REBEL's structural tokens are native — vocab size matches, no resize."""
     tok = get_tokenizer()
-    model = EEGBartModel(tok, eeg_dim=840, dropout=0.0)
+    model = get_model()
+    assert model.bart.get_input_embeddings().num_embeddings == len(tok), \
+        "Embedding table size should equal tokenizer size without resizing"
+    print("  PASS: test_no_embedding_resize_needed")
+
+
+def test_model_param_groups():
+    model = get_model()
     groups = model.param_groups(bridge_lr=3e-4, bart_lr=3e-5, weight_decay=0.01)
     assert len(groups) == 2
     assert groups[0]["lr"] == 3e-4
@@ -332,8 +369,7 @@ def test_end_to_end_with_real_data():
         tokenizer=get_tokenizer(),
     )
 
-    model = EEGBartModel(tokenizer, eeg_dim=840, dropout=0.0)
-    model.eval()
+    model = get_model()
 
     batch = next(iter(loaders["train"]))
 
@@ -377,6 +413,8 @@ if __name__ == "__main__":
         test_model_forward,
         test_model_generate_greedy,
         test_model_generate_beam,
+        test_model_uses_rebel_dim,
+        test_no_embedding_resize_needed,
         test_model_param_groups,
         # Integration
         test_end_to_end_with_real_data,

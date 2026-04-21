@@ -1,13 +1,14 @@
 """
-EEG-to-Graph: Generative Model (Bridge + BART)
-===============================================
+EEG-to-Graph: Generative Model (Bridge + REBEL)
+================================================
 
-Wraps a pretrained `facebook/bart-base` with a Bridge projection that
-maps EEG word-level features (batch, src_len, 840) into BART's encoder
-embedding space (d_model=768). The structured triplet output format
-(`<triplet> subj <subj> rel <rel> obj <obj>`) is preserved — the four
-markers are registered as special tokens on the tokenizer, and
-`resize_token_embeddings` extends BART's embedding table accordingly.
+Wraps a pretrained `Babelscape/rebel-large` (a BART-large checkpoint
+already fine-tuned for relation extraction) with a Bridge projection
+that maps EEG word-level features (batch, src_len, 840) into the
+encoder embedding space (d_model=1024). REBEL's native triplet format
+(`<triplet> subj <subj> obj <obj> rel`) is used as-is — the structural
+tokens are already in REBEL's vocabulary, so no embedding resize is
+needed.
 
     ┌──────────────┐        ┌──────────────────┐
     │  EEG Input   │        │  Target Tokens   │
@@ -24,7 +25,7 @@ markers are registered as special tokens on the tokenizer, and
            ▼                         ▼
     ┌─────────────────────────────────────────┐
     │   BartForConditionalGeneration          │
-    │   (encoder + decoder + lm_head)         │
+    │   (REBEL = BART-large fine-tuned on RE) │
     └─────────────────────────────────────────┘
                        │
                        ▼
@@ -38,22 +39,25 @@ from transformers import BartForConditionalGeneration
 
 class EEGBartModel(nn.Module):
     """
-    Bridge + BART encoder-decoder for EEG → triplet generation.
+    Bridge + REBEL (BART-large) encoder-decoder for EEG → triplet generation.
 
     Args:
-        tokenizer: BART tokenizer with structural tokens already added
+        tokenizer: REBEL tokenizer (structural tokens already native)
         eeg_dim:   Input EEG feature dim (840 for ZuCo)
-        bart_name: HuggingFace model name (default "facebook/bart-base")
+        bart_name: HuggingFace model name (default "Babelscape/rebel-large")
         dropout:   Dropout rate applied inside the Bridge projection
     """
 
-    def __init__(self, tokenizer, eeg_dim=840, bart_name="facebook/bart-base", dropout=0.3):
+    def __init__(self, tokenizer, eeg_dim=840, bart_name="Babelscape/rebel-large", dropout=0.3):
         super().__init__()
         self.bart_name = bart_name
         self.pad_token_id = tokenizer.pad_token_id
 
         self.bart = BartForConditionalGeneration.from_pretrained(bart_name)
-        self.bart.resize_token_embeddings(len(tokenizer))
+        # No-op when vocab already matches; keeps us safe if the tokenizer
+        # ever gets extra tokens added downstream.
+        if self.bart.get_input_embeddings().num_embeddings != len(tokenizer):
+            self.bart.resize_token_embeddings(len(tokenizer))
 
         d_model = self.bart.config.d_model
         self.bridge = nn.Sequential(
@@ -102,9 +106,25 @@ class EEGBartModel(nn.Module):
             decoder_start_token_id=self.bart.config.decoder_start_token_id,
         )
 
+    def freeze_bart(self):
+        """Freeze all BART/REBEL params — only the Bridge trains."""
+        for p in self.bart.parameters():
+            p.requires_grad = False
+
     def param_groups(self, bridge_lr, bart_lr, weight_decay):
-        """Differential learning rates: high for Bridge, low for BART."""
-        return [
-            {"params": self.bridge.parameters(), "lr": bridge_lr, "weight_decay": weight_decay},
-            {"params": self.bart.parameters(),   "lr": bart_lr,   "weight_decay": weight_decay},
-        ]
+        """
+        Differential learning rates: high for Bridge, low for BART.
+        BART params that are frozen (requires_grad=False) are skipped —
+        otherwise AdamW would still allocate optimizer state for them.
+        """
+        groups = [{
+            "params": list(self.bridge.parameters()),
+            "lr": bridge_lr, "weight_decay": weight_decay,
+        }]
+        trainable_bart = [p for p in self.bart.parameters() if p.requires_grad]
+        if trainable_bart:
+            groups.append({
+                "params": trainable_bart,
+                "lr": bart_lr, "weight_decay": weight_decay,
+            })
+        return groups

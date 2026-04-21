@@ -29,7 +29,7 @@ def load_model(checkpoint_path, tokenizer, device):
     """Load a trained Bridge + BART model from checkpoint."""
     ckpt = torch.load(checkpoint_path, map_location=device)
     model_args = ckpt.get("args", {})
-    bart_name = ckpt.get("bart_name") or model_args.get("bart_name", "facebook/bart-base")
+    bart_name = ckpt.get("bart_name") or model_args.get("bart_name", "Babelscape/rebel-large")
 
     model = EEGBartModel(
         tokenizer=tokenizer,

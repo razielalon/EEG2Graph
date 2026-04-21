@@ -3,8 +3,8 @@ EEG-to-Graph: Seq2Seq Dataset
 ==============================
 
 Pairs preprocessed ZuCo EEG features (encoder input) with linearized
-triplet token sequences (decoder target), tokenized with BART's BPE
-tokenizer plus the four structural markers.
+triplet token sequences (decoder target), tokenized with REBEL's BPE
+tokenizer (which already includes the structural markers natively).
 
 Expected triplets format (JSON):
 [
@@ -176,7 +176,7 @@ def build_dataloaders(
     max_src_len=128,
     max_tgt_len=128,
     num_workers=0,
-    bart_name="facebook/bart-base",
+    bart_name="Babelscape/rebel-large",
     tokenizer=None,
     limits=None,
 ):
