@@ -1,4 +1,5 @@
 venv/
 *.log
 processed_zuco/
+processed_zuco1/
 __pycache__/
