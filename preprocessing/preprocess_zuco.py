@@ -1,15 +1,14 @@
 """
-EEG-to-Graph: ZuCo 2.0 Data Preprocessing Pipeline
+EEG-to-Graph: ZuCo Data Preprocessing Pipeline
 ====================================================
 
-This script extracts word-level EEG frequency-domain features from the ZuCo 2.0 dataset,
-preparing them for the EEG-to-Graph translation model.
+This script extracts word-level EEG frequency-domain features from the ZuCo
+dataset (both ZuCo 1.0 and ZuCo 2.0 are supported), preparing them for the
+EEG-to-Graph translation model.
 
 Decisions baked in:
-- Tasks: Both Task 1 (Normal Reading) + Task 2 (Task-Specific Reading)
 - EEG features: Frequency-domain (8 bands × 105 channels = 840 dims per word)
 - Fixation window: GD (Gaze Duration)
-- Subjects: All 18 pooled
 - Missing words: Zero-padded
 - Normalization: Per-subject z-score
 
@@ -17,20 +16,20 @@ Requirements:
     pip install h5py numpy scipy scikit-learn tqdm
 
 Usage:
-    python preprocess_zuco.py --data_dir /path/to/zuco2 --output_dir /path/to/output
+    python preprocess_zuco.py --dataset zuco2 --data_dir /path/to/zuco2 --output_dir /path/to/output
+    python preprocess_zuco.py --dataset zuco1 --data_dir /path/to/zuco1 --output_dir /path/to/output
 
-Expected directory structure:
+Expected directory structure (ZuCo 2.0):
     zuco2/
-    ├── task1-NR/
-    │   ├── resultsYAC_NR.mat
-    │   ├── resultsYAG_NR.mat
-    │   └── ...
-    ├── task2-TSR/
-    │   ├── resultsYAC_TSR.mat
-    │   ├── resultsYAG_TSR.mat
-    │   └── ...
+    ├── task1-NR/  (resultsYAC_NR.mat, ...)
+    ├── task2-TSR/ (resultsYAC_TSR.mat, ...)
     └── task_materials/
-        └── ... (sentence texts and relation labels)
+
+Expected directory structure (ZuCo 1.0):
+    zuco1/
+    ├── task1-SR/  (resultsZAB_SR.mat, ...)
+    ├── task2-NR/  (resultsZAB_NR.mat, ...)
+    └── task3-TSR/ (resultsZAB_TSR.mat, ...)
 """
 
 import os
@@ -62,17 +61,30 @@ N_CHANNELS = 105
 # Total feature dimensionality per word: 8 bands × 105 channels = 840
 FEATURE_DIM = len(FREQ_BANDS) * N_CHANNELS  # 840
 
-# Subject IDs from ZuCo 2.0
-SUBJECT_IDS = [
-    "YAC", "YAG", "YAK", "YDG", "YDR", "YFR", "YFS", "YHS",
-    "YIS", "YLS", "YMD", "YMS", "YRH", "YRK", "YRP", "YSD",
-    "YSL", "YTL"
-]
-
-# Task configuration
-TASKS = {
-    "task1-NR": {"suffix": "NR", "description": "Normal Reading"},
-    "task2-TSR": {"suffix": "TSR", "description": "Task-Specific Reading"},
+# Dataset-specific configuration. Selected at runtime via --dataset.
+DATASET_CONFIGS = {
+    "zuco1": {
+        "subjects": [
+            "ZAB", "ZDM", "ZDN", "ZGW", "ZJM", "ZJN",
+            "ZJS", "ZKB", "ZKH", "ZKW", "ZMG", "ZPH",
+        ],
+        "tasks": {
+            #"task1-SR":  {"suffix": "SR",  "description": "Sentiment Reading (Normal)"},
+            "task2-NR":  {"suffix": "NR",  "description": "Normal Reading (Wikipedia)"},
+            "task3-TSR": {"suffix": "TSR", "description": "Task-Specific Reading"},
+        },
+    },
+    "zuco2": {
+        "subjects": [
+            "YAC", "YAG", "YAK", "YDG", "YDR", "YFR", "YFS", "YHS",
+            "YIS", "YLS", "YMD", "YMS", "YRH", "YRK", "YRP", "YSD",
+            "YSL", "YTL",
+        ],
+        "tasks": {
+            "task1-NR":  {"suffix": "NR",  "description": "Normal Reading"},
+            "task2-TSR": {"suffix": "TSR", "description": "Task-Specific Reading"},
+        },
+    },
 }
 
 # Train/val/test split ratios (split by sentence, not by sample)
@@ -485,7 +497,7 @@ def split_by_sentence(all_samples, seed=42):
 # Save to Disk
 # =============================================================================
 
-def save_splits(splits, norm_stats, output_dir):
+def save_splits(splits, norm_stats, output_dir, dataset_name, tasks, subject_ids):
     """
     Save processed data to disk in a format ready for the training pipeline.
 
@@ -500,12 +512,13 @@ def save_splits(splits, norm_stats, output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
     dataset_info = {
+        "dataset": dataset_name,
         "feature_dim": FEATURE_DIM,
         "fixation_window": FIXATION_WINDOW,
         "freq_bands": FREQ_BANDS,
         "n_channels": N_CHANNELS,
-        "tasks": list(TASKS.keys()),
-        "subjects": SUBJECT_IDS,
+        "tasks": list(tasks.keys()),
+        "subjects": subject_ids,
         "splits": {},
     }
 
@@ -566,18 +579,29 @@ def save_splits(splits, norm_stats, output_dir):
 # Main Pipeline
 # =============================================================================
 
-def main(data_dir, output_dir):
+def main(dataset_name, data_dir, output_dir):
     """Run the full preprocessing pipeline."""
 
+    if dataset_name not in DATASET_CONFIGS:
+        raise ValueError(
+            f"Unknown dataset '{dataset_name}'. "
+            f"Valid options: {list(DATASET_CONFIGS.keys())}"
+        )
+
+    config = DATASET_CONFIGS[dataset_name]
+    subject_ids = config["subjects"]
+    tasks = config["tasks"]
+
     print("=" * 60)
-    print("EEG-to-Graph: ZuCo 2.0 Preprocessing Pipeline")
+    print(f"EEG-to-Graph: {dataset_name.upper()} Preprocessing Pipeline")
     print("=" * 60)
     print(f"\nConfiguration:")
+    print(f"  Dataset:          {dataset_name}")
     print(f"  Fixation window:  {FIXATION_WINDOW}")
     print(f"  Feature fields:   {FEATURE_FIELDS}")
     print(f"  Feature dim:      {FEATURE_DIM}")
-    print(f"  Tasks:            {list(TASKS.keys())}")
-    print(f"  Subjects:         {len(SUBJECT_IDS)}")
+    print(f"  Tasks:            {list(tasks.keys())}")
+    print(f"  Subjects:         {len(subject_ids)}")
     print(f"  Data directory:   {data_dir}")
     print(f"  Output directory: {output_dir}")
 
@@ -588,7 +612,7 @@ def main(data_dir, output_dir):
 
     all_samples = []
 
-    for task_dir, task_info in TASKS.items():
+    for task_dir, task_info in tasks.items():
         task_path = os.path.join(data_dir, task_dir)
         suffix = task_info["suffix"]
 
@@ -612,7 +636,7 @@ def main(data_dir, output_dir):
                 print(f"  SKIPPING: No directory found for {task_dir}")
                 continue
 
-        for subject_id in tqdm(SUBJECT_IDS, desc=f"  Subjects ({suffix})"):
+        for subject_id in tqdm(subject_ids, desc=f"  Subjects ({suffix})"):
             # Try common filename patterns
             possible_filenames = [
                 f"results{subject_id}_{suffix}.mat",
@@ -647,8 +671,9 @@ def main(data_dir, output_dir):
     if len(all_samples) == 0:
         print("\nERROR: No data was extracted. Please check your data directory structure.")
         print("Expected structure:")
-        print("  <data_dir>/task1-NR/resultsYAC_NR.mat")
-        print("  <data_dir>/task2-TSR/resultsYAC_TSR.mat")
+        for task_dir, task_info in tasks.items():
+            example_subj = subject_ids[0]
+            print(f"  <data_dir>/{task_dir}/results{example_subj}_{task_info['suffix']}.mat")
         return
 
     # Print summary
@@ -686,7 +711,7 @@ def main(data_dir, output_dir):
     print("Step 4: Saving processed data")
     print("=" * 60)
 
-    save_splits(splits, norm_stats, output_dir)
+    save_splits(splits, norm_stats, output_dir, dataset_name, tasks, subject_ids)
 
     print("\n" + "=" * 60)
     print("DONE! Preprocessing complete.")
@@ -702,12 +727,19 @@ def main(data_dir, output_dir):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="EEG-to-Graph: ZuCo 2.0 Preprocessing")
+    parser = argparse.ArgumentParser(description="EEG-to-Graph: ZuCo Preprocessing")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="zuco2",
+        choices=list(DATASET_CONFIGS.keys()),
+        help="Which ZuCo dataset to preprocess (default: zuco2)",
+    )
     parser.add_argument(
         "--data_dir",
         type=str,
         required=True,
-        help="Path to the ZuCo 2.0 data directory",
+        help="Path to the ZuCo data directory",
     )
     parser.add_argument(
         "--output_dir",
@@ -716,4 +748,4 @@ if __name__ == "__main__":
         help="Path to save processed data (default: ./processed_zuco)",
     )
     args = parser.parse_args()
-    main(args.data_dir, args.output_dir)
+    main(args.dataset, args.data_dir, args.output_dir)
