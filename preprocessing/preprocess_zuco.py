@@ -38,6 +38,7 @@ import json
 import h5py
 import numpy as np
 from collections import defaultdict
+from scipy.io import loadmat
 from sklearn.model_selection import GroupShuffleSplit
 from tqdm import tqdm
 
@@ -302,18 +303,137 @@ def extract_sentence_data(h5file, sentence_ref=None, sentence_text=None, word_gr
     }
 
 
-def process_subject_file(filepath, subject_id, task_name):
+def _is_matlab_v73(filepath):
     """
-    Process a single subject's .mat file and extract all sentence data.
+    Detect MATLAB .mat file format by reading the header.
+    Returns True for v7.3 (HDF5-backed), False for older v5/v7 (binary).
+    """
+    try:
+        with open(filepath, "rb") as f:
+            header = f.read(128)
+        return b"MATLAB 7.3" in header
+    except Exception:
+        return False
 
-    Args:
-        filepath: Path to the .mat file
-        subject_id: e.g. "YAC"
-        task_name: e.g. "task1-NR"
 
-    Returns:
-        List of dicts, one per valid sentence, each containing:
-            - subject_id, task, text, words, eeg_features, has_fixation
+def _scipy_mat_to_str(x):
+    """Convert a scipy.io-loaded MATLAB string field to a Python str."""
+    if x is None:
+        return ""
+    if isinstance(x, str):
+        return x
+    if isinstance(x, np.ndarray):
+        if x.size == 0:
+            return ""
+        flat = x.flatten()
+        if flat.dtype.kind in ("U", "S"):
+            return str(flat[0])
+        # Char array
+        try:
+            return "".join(str(c) for c in flat)
+        except Exception:
+            return str(flat[0])
+    return str(x)
+
+
+def _scipy_mat_to_array(x):
+    """Convert a scipy.io-loaded numeric field to a 1D float32 array, or None."""
+    if x is None:
+        return None
+    try:
+        arr = np.asarray(x, dtype=np.float32).flatten()
+    except Exception:
+        return None
+    if arr.size == 0:
+        return None
+    if np.all(np.isnan(arr)):
+        return None
+    return arr
+
+
+def _process_subject_file_v5(filepath, subject_id, task_name):
+    """
+    Process a single MATLAB v5/v7 (non-HDF5) .mat file. Used for ZuCo 1.0.
+
+    Uses scipy.io.loadmat with struct_as_record=False so nested structs expose
+    their fields as Python attributes (e.g. sent.content, sent.word, word.GD_t1).
+    """
+    samples = []
+
+    try:
+        mat = loadmat(filepath, squeeze_me=True, struct_as_record=False)
+    except Exception as e:
+        print(f"  ERROR loading {filepath}: {e}")
+        return samples
+
+    if "sentenceData" not in mat:
+        print(f"  WARNING: 'sentenceData' not found in {filepath}")
+        return samples
+
+    sentence_data = np.atleast_1d(mat["sentenceData"])
+
+    for sent in sentence_data:
+        try:
+            sentence_text = _scipy_mat_to_str(getattr(sent, "content", ""))
+            word_array = getattr(sent, "word", None)
+            if word_array is None:
+                continue
+
+            # Missing-word entries can come back as NaN scalars
+            if isinstance(word_array, float) and np.isnan(word_array):
+                continue
+
+            words_arr = np.atleast_1d(word_array)
+            n_words = len(words_arr)
+            if n_words == 0 or sentence_text == "":
+                continue
+
+            words = []
+            for w in words_arr:
+                if w is None or (isinstance(w, float) and np.isnan(w)):
+                    words.append("<UNK>")
+                else:
+                    wc = getattr(w, "content", None)
+                    words.append(_scipy_mat_to_str(wc) or "<UNK>")
+
+            eeg_features = np.zeros((n_words, FEATURE_DIM), dtype=np.float32)
+            has_fixation = np.zeros(n_words, dtype=bool)
+
+            for word_idx, w in enumerate(words_arr):
+                if w is None or (isinstance(w, float) and np.isnan(w)):
+                    continue
+                for band_idx, field_name in enumerate(FEATURE_FIELDS):
+                    band_values = _scipy_mat_to_array(getattr(w, field_name, None))
+                    if band_values is None or band_values.size < N_CHANNELS:
+                        continue
+                    channel_values = band_values[:N_CHANNELS]
+                    if np.all(np.isnan(channel_values)):
+                        continue
+                    channel_values = np.nan_to_num(channel_values, nan=0.0)
+                    start = band_idx * N_CHANNELS
+                    eeg_features[word_idx, start:start + N_CHANNELS] = channel_values
+                    has_fixation[word_idx] = True
+
+            if not np.any(has_fixation):
+                continue
+
+            samples.append({
+                "subject_id": subject_id,
+                "task": task_name,
+                "text": sentence_text,
+                "words": words,
+                "eeg_features": eeg_features,
+                "has_fixation": has_fixation,
+            })
+        except Exception:
+            continue
+
+    return samples
+
+
+def _process_subject_file_v73(filepath, subject_id, task_name):
+    """
+    Process a single MATLAB v7.3 (HDF5-backed) .mat file. Used for ZuCo 2.0.
     """
     samples = []
 
@@ -378,6 +498,22 @@ def process_subject_file(filepath, subject_id, task_name):
         print(f"  ERROR processing {filepath}: {e}")
 
     return samples
+
+
+def process_subject_file(filepath, subject_id, task_name):
+    """
+    Process a single subject's .mat file and extract all sentence data.
+
+    Dispatches to the v7.3 (h5py) or v5/v7 (scipy) reader based on the file
+    header. ZuCo 2.0 ships as v7.3; ZuCo 1.0 ships as v5.
+
+    Returns:
+        List of dicts, one per valid sentence, each containing:
+            - subject_id, task, text, words, eeg_features, has_fixation
+    """
+    if _is_matlab_v73(filepath):
+        return _process_subject_file_v73(filepath, subject_id, task_name)
+    return _process_subject_file_v5(filepath, subject_id, task_name)
 
 
 # =============================================================================

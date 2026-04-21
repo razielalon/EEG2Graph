@@ -1,10 +1,11 @@
 """
-ZuCo 2.0 Data Inspector
+ZuCo Data Inspector
 ========================
 
 Use this script to explore the structure of the ZuCo .mat files before
-running the full preprocessing pipeline. Helps verify that the HDF5
-paths and field names match what the preprocessor expects.
+running the full preprocessing pipeline. Supports both ZuCo 2.0 (MATLAB
+v7.3 / HDF5) and ZuCo 1.0 (MATLAB v5, binary) — dispatched from the file
+header.
 
 Usage:
     python inspect_zuco.py /path/to/resultsYAC_NR.mat
@@ -15,6 +16,135 @@ import sys
 import argparse
 import h5py
 import numpy as np
+from scipy.io import loadmat
+
+
+def is_matlab_v73(filepath):
+    """Detect MATLAB .mat file format. True for v7.3 (HDF5), False for v5."""
+    try:
+        with open(filepath, "rb") as f:
+            header = f.read(128)
+        return b"MATLAB 7.3" in header
+    except Exception:
+        return False
+
+
+def scipy_mat_to_str(x):
+    """Convert a scipy.io-loaded MATLAB string field to a Python str."""
+    if x is None:
+        return ""
+    if isinstance(x, str):
+        return x
+    if isinstance(x, np.ndarray):
+        if x.size == 0:
+            return ""
+        flat = x.flatten()
+        if flat.dtype.kind in ("U", "S"):
+            return str(flat[0])
+        try:
+            return "".join(str(c) for c in flat)
+        except Exception:
+            return str(flat[0])
+    return str(x)
+
+
+def inspect_v5(filepath, sentence_idx=0, detailed=False, structure_only=False):
+    """Inspect a MATLAB v5 (.mat) file — used for ZuCo 1.0."""
+    try:
+        mat = loadmat(filepath, squeeze_me=True, struct_as_record=False)
+    except Exception as e:
+        print(f"ERROR loading .mat file: {e}")
+        return
+
+    print("Top-level keys:")
+    for k in sorted(mat.keys()):
+        if k.startswith("__"):
+            continue
+        v = mat[k]
+        shape = getattr(v, "shape", "scalar")
+        dtype = getattr(v, "dtype", type(v).__name__)
+        print(f"  {k}: shape={shape}, dtype={dtype}")
+
+    if structure_only:
+        return
+
+    if "sentenceData" not in mat:
+        print("\nWARNING: 'sentenceData' not found!")
+        return
+
+    sentence_data = np.atleast_1d(mat["sentenceData"])
+    n_sent = len(sentence_data)
+    print(f"\nNumber of sentences: {n_sent}")
+
+    if sentence_idx >= n_sent:
+        print(f"Sentence index {sentence_idx} out of range (max: {n_sent - 1})")
+        return
+
+    sent = sentence_data[sentence_idx]
+    print(f"\n{'='*50}")
+    print(f"Sentence {sentence_idx}")
+    print(f"{'='*50}")
+
+    text = scipy_mat_to_str(getattr(sent, "content", ""))
+    print(f"  Text: {text}")
+
+    print(f"\n  Sentence-level fields:")
+    for attr in sorted(getattr(sent, "_fieldnames", [])):
+        val = getattr(sent, attr, None)
+        shape = getattr(val, "shape", "scalar")
+        dtype = getattr(val, "dtype", type(val).__name__)
+        print(f"    {attr}: shape={shape}, dtype={dtype}")
+
+    word_array = getattr(sent, "word", None)
+    if word_array is None or (isinstance(word_array, float) and np.isnan(word_array)):
+        print("\n  No word-level data for this sentence.")
+        return
+
+    words_arr = np.atleast_1d(word_array)
+    n_words = len(words_arr)
+    print(f"\n  Number of words: {n_words}")
+
+    word_strs = []
+    for w in words_arr[:10]:
+        if w is None or (isinstance(w, float) and np.isnan(w)):
+            word_strs.append("<UNK>")
+        else:
+            word_strs.append(scipy_mat_to_str(getattr(w, "content", "")) or "<UNK>")
+    print(f"  First words: {word_strs}")
+    if n_words > 10:
+        print(f"  ... and {n_words - 10} more")
+
+    # Show word-level field names on the first valid word
+    sample_word = None
+    for w in words_arr:
+        if w is not None and not (isinstance(w, float) and np.isnan(w)):
+            sample_word = w
+            break
+
+    if sample_word is not None:
+        fields = sorted(getattr(sample_word, "_fieldnames", []))
+        print(f"\n  Word-level fields ({len(fields)}): {fields}")
+
+        if detailed:
+            gd_fields = [f for f in fields if f.startswith("GD_")]
+            ffd_fields = [f for f in fields if f.startswith("FFD_")]
+            trt_fields = [f for f in fields if f.startswith("TRT_")]
+            print(f"\n  GD fields:  {gd_fields}")
+            print(f"  FFD fields: {ffd_fields}")
+            print(f"  TRT fields: {trt_fields}")
+
+            for field in gd_fields[:2]:
+                print(f"\n  Inspecting {field} on word 0:")
+                val = getattr(sample_word, field, None)
+                if val is None:
+                    print("    (missing)")
+                    continue
+                arr = np.asarray(val).flatten()
+                print(f"    shape={getattr(val, 'shape', 'scalar')}, size={arr.size}")
+                if arr.size > 0:
+                    print(f"    First 5 values: {arr[:5]}")
+                    nan_count = int(np.isnan(arr.astype(np.float64)).sum()) if arr.dtype.kind == "f" else 0
+                    print(f"    NaN count: {nan_count} / {arr.size}")
 
 
 def print_h5_structure(group, prefix="", max_depth=4, current_depth=0):
@@ -224,6 +354,17 @@ def main():
 
     print(f"Opening: {args.filepath}\n")
 
+    if not is_matlab_v73(args.filepath):
+        print("Detected MATLAB v5 / v7 (non-HDF5) — using scipy.io.loadmat reader.\n")
+        inspect_v5(
+            args.filepath,
+            sentence_idx=args.sentence,
+            detailed=args.detailed,
+            structure_only=args.structure_only,
+        )
+        return
+
+    print("Detected MATLAB v7.3 — using h5py reader.\n")
     with h5py.File(args.filepath, "r") as h5file:
         # Show top-level structure
         print("Top-level structure:")
