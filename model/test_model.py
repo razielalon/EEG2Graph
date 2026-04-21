@@ -250,7 +250,8 @@ def test_collate_fn():
 
 
 def test_build_dataloaders_with_real_data():
-    processed_dir = os.path.join(os.path.dirname(__file__), "..", "processed_zuco")
+    data_subdir = os.environ.get("EEG_DATA_DIR", "processed_zuco")
+    processed_dir = os.path.join(os.path.dirname(__file__), "..", data_subdir)
     triplets_path = os.path.join(processed_dir, "sentence_triplets.json")
 
     if not os.path.exists(triplets_path):
@@ -356,7 +357,8 @@ def test_model_param_groups():
 # =============================================================================
 
 def test_end_to_end_with_real_data():
-    processed_dir = os.path.join(os.path.dirname(__file__), "..", "processed_zuco")
+    data_subdir = os.environ.get("EEG_DATA_DIR", "processed_zuco")
+    processed_dir = os.path.join(os.path.dirname(__file__), "..", data_subdir)
     triplets_path = os.path.join(processed_dir, "sentence_triplets.json")
 
     if not os.path.exists(triplets_path):
