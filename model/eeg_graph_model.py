@@ -48,7 +48,8 @@ class EEGBartModel(nn.Module):
         dropout:   Dropout rate applied inside the Bridge projection
     """
 
-    def __init__(self, tokenizer, eeg_dim=840, bart_name="Babelscape/rebel-large", dropout=0.3):
+    def __init__(self, tokenizer, eeg_dim=840, bart_name="Babelscape/rebel-large", dropout=0.3,
+                 bridge_layers=1):
         super().__init__()
         self.bart_name = bart_name
         self.pad_token_id = tokenizer.pad_token_id
@@ -60,11 +61,16 @@ class EEGBartModel(nn.Module):
             self.bart.resize_token_embeddings(len(tokenizer))
 
         d_model = self.bart.config.d_model
-        self.bridge = nn.Sequential(
-            nn.Linear(eeg_dim, d_model),
-            nn.LayerNorm(d_model),
-            nn.Dropout(dropout),
-        )
+        layers = []
+        in_dim = eeg_dim
+        for i in range(bridge_layers):
+            layers.append(nn.Linear(in_dim, d_model))
+            if i < bridge_layers - 1:
+                layers.append(nn.GELU())
+            layers.append(nn.LayerNorm(d_model))
+            layers.append(nn.Dropout(dropout))
+            in_dim = d_model
+        self.bridge = nn.Sequential(*layers)
 
     def forward(self, src, src_mask, tgt):
         """
@@ -109,6 +115,11 @@ class EEGBartModel(nn.Module):
         """Freeze all BART/REBEL params — only the Bridge trains."""
         for p in self.bart.parameters():
             p.requires_grad = False
+
+    def unfreeze_bart(self):
+        """Unfreeze all BART/REBEL params for full fine-tuning."""
+        for p in self.bart.parameters():
+            p.requires_grad = True
 
     def param_groups(self, bridge_lr, bart_lr, weight_decay):
         """

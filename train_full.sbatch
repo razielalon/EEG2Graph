@@ -31,6 +31,9 @@ python train.py \
     --epochs 80 \
     --batch_size 16 \
     --num_workers 4 \
-    --save_every 10
+    --save_every 10 \
+    --warmup_epochs 10 \
+    --bridge_layers 2 \
+    --patience 20
 
 echo "END=$(date)"
