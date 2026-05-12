@@ -4,6 +4,7 @@
 ###     sbatch train_smoke.sbatch
 
 #SBATCH --qos=eliyanac
+#SBATCH --partition=rtx3090                       ### qos jobs are forbidden on 'main'; partition name has NO underscore
 #SBATCH --time=0-02:00:00
 #SBATCH --job-name=eeg2graph-smoke
 #SBATCH --output=logs/eeg2graph-smoke-%J.out
