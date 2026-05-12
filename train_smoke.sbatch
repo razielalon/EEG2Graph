@@ -3,9 +3,9 @@
 ### Submit from the cluster's manager node with `conda` deactivated:
 ###     sbatch train_smoke.sbatch
 
-#SBATCH --qos=eliyanac
-#SBATCH --partition=gtx1080                       ### rtx3090 hit MaxGRESPerAccount; try rtx2080 → gtx1080 if it fails too
-#SBATCH --time=0-02:00:00
+#SBATCH --qos=debug                               ### eliyanac account quota is full (4 jobs on l40s); use debug qos for the smoke test
+#SBATCH --partition=debug
+#SBATCH --time=0-00:30:00                         ### debug qos typically caps at 30 min; smoke test takes ~10 min
 #SBATCH --job-name=eeg2graph-smoke
 #SBATCH --output=logs/eeg2graph-smoke-%J.out
 #SBATCH --mail-user=zivcz@post.bgu.ac.il    ### replace with your BGU email if different
