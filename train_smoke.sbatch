@@ -3,14 +3,13 @@
 ### Submit from the cluster's manager node with `conda` deactivated:
 ###     sbatch train_smoke.sbatch
 
-#SBATCH --account=eliyanac                        ### Aliya's accounting group (per IT)
 #SBATCH --qos=eliyanac
 #SBATCH --time=0-02:00:00
 #SBATCH --job-name=eeg2graph-smoke
 #SBATCH --output=logs/eeg2graph-smoke-%J.out
-#SBATCH --mail-user=razielal@post.bgu.ac.il    ### replace with your BGU email if different
+#SBATCH --mail-user=zivcz@post.bgu.ac.il    ### replace with your BGU email if different
 #SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --gpus=rtx_3090:1                         ### 24GB card — enough for BART-large at batch 16
+#SBATCH --gpus=1                         ### 24GB card — enough for BART-large at batch 16
 #SBATCH --mem=48G                                 ### override default 24G; HF model load + dataloaders
 
 echo "JOBID=$SLURM_JOBID"
