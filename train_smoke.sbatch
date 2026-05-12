@@ -4,6 +4,7 @@
 ###     sbatch train_smoke.sbatch
 
 #SBATCH --account=eliyanac                        ### Aliya's accounting group (per IT)
+#SBATCH --qos=eliyanac
 #SBATCH --time=0-02:00:00
 #SBATCH --job-name=eeg2graph-smoke
 #SBATCH --output=logs/eeg2graph-smoke-%J.out
