@@ -4,7 +4,7 @@
 ###     sbatch train_smoke.sbatch
 
 #SBATCH --qos=eliyanac
-#SBATCH --partition=rtx2080                       ### rtx3090 hit MaxGRESPerAccount; try rtx2080 → gtx1080 if it fails too
+#SBATCH --partition=gtx1080                       ### rtx3090 hit MaxGRESPerAccount; try rtx2080 → gtx1080 if it fails too
 #SBATCH --time=0-02:00:00
 #SBATCH --job-name=eeg2graph-smoke
 #SBATCH --output=logs/eeg2graph-smoke-%J.out
