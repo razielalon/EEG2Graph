@@ -3,9 +3,7 @@
 ### Submit from the cluster's manager node with `conda` deactivated:
 ###     sbatch train_smoke.sbatch
 
-### No --partition / --qos: per IT, leave them out so the default account/qos
-### (Eliya's group) is auto-selected. If you ever need to set them explicitly,
-### use the group qos, e.g. `--qos=eliyanac`.
+#SBATCH --account=eliyanac                        ### Aliya's accounting group (per IT)
 #SBATCH --time=0-02:00:00
 #SBATCH --job-name=eeg2graph-smoke
 #SBATCH --output=logs/eeg2graph-smoke-%J.out
