@@ -24,7 +24,7 @@ DATASET_PREFIXES = {
 
 DEFAULT_OUTPUT_DIRS = {
     "zuco1": "./processed_zuco1",
-    "zuco2": "./processed_zuco",
+    "zuco2": "./processed_zuco2",
 }
 
 
@@ -55,7 +55,7 @@ def main():
         "--output_dir",
         type=str,
         default=None,
-        help="Local directory to download into (default: ./processed_zuco for zuco2, ./processed_zuco1 for zuco1)",
+        help="Local directory to download into (default: ./processed_zuco2 for zuco2, ./processed_zuco1 for zuco1)",
     )
     parser.add_argument(
         "--bucket",

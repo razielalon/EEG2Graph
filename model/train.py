@@ -11,8 +11,8 @@ Includes:
 
 Usage:
     python train.py \
-        --processed_dir ../processed_zuco \
-        --triplets_path ../processed_zuco/sentence_triplets.json \
+        --processed_dir ../processed_zuco2 \
+        --triplets_path ../processed_zuco2/sentence_triplets.json \
         --output_dir ../checkpoints \
         --epochs 80 \
         --batch_size 16

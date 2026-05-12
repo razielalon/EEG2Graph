@@ -250,12 +250,12 @@ def test_collate_fn():
 
 
 def test_build_dataloaders_with_real_data():
-    data_subdir = os.environ.get("EEG_DATA_DIR", "processed_zuco")
+    data_subdir = os.environ.get("EEG_DATA_DIR", "processed_zuco2")
     processed_dir = os.path.join(os.path.dirname(__file__), "..", data_subdir)
     triplets_path = os.path.join(processed_dir, "sentence_triplets.json")
 
     if not os.path.exists(triplets_path):
-        print("  SKIP: test_build_dataloaders_with_real_data (no processed_zuco)")
+        print("  SKIP: test_build_dataloaders_with_real_data (no processed_zuco2)")
         return
 
     loaders, tokenizer = build_dataloaders(
@@ -357,12 +357,12 @@ def test_model_param_groups():
 # =============================================================================
 
 def test_end_to_end_with_real_data():
-    data_subdir = os.environ.get("EEG_DATA_DIR", "processed_zuco")
+    data_subdir = os.environ.get("EEG_DATA_DIR", "processed_zuco2")
     processed_dir = os.path.join(os.path.dirname(__file__), "..", data_subdir)
     triplets_path = os.path.join(processed_dir, "sentence_triplets.json")
 
     if not os.path.exists(triplets_path):
-        print("  SKIP: test_end_to_end_with_real_data (no processed_zuco)")
+        print("  SKIP: test_end_to_end_with_real_data (no processed_zuco2)")
         return
 
     loaders, tokenizer = build_dataloaders(

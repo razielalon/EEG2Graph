@@ -24,8 +24,8 @@ source activate eeg2graph                         ### replace with your conda en
 cd "$HOME/EEG2Graph/model"                        ### adjust if the repo lives elsewhere on the cluster
 
 python train.py \
-    --processed_dir ../processed_zuco \
-    --triplets_path ../processed_zuco/sentence_triplets.json \
+    --processed_dir ../processed_zuco2 \
+    --triplets_path ../processed_zuco2/sentence_triplets.json \
     --output_dir ../checkpoints_smoke \
     --epochs 3 \
     --batch_size 16 \

@@ -8,7 +8,7 @@ Usage:
     python inference.py \
         --checkpoint ./checkpoints/best_model.pt \
         --tokenizer_dir ./checkpoints/tokenizer \
-        --processed_dir ./processed_zuco \
+        --processed_dir ./processed_zuco1or2 \
         --split test \
         --beam_size 4 \
         --output predictions.json
