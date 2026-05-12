@@ -3,8 +3,9 @@
 ### Submit from the cluster's manager node with `conda` deactivated:
 ###     sbatch train_smoke.sbatch
 
-#SBATCH --partition=course                        ### course user (student/lab account); use 'main' only if your account has 'main' qos for GPU
-#SBATCH --qos=course
+### No --partition / --qos: per IT, leave them out so the default account/qos
+### (Eliya's group) is auto-selected. If you ever need to set them explicitly,
+### use the group qos, e.g. `--qos=eliyanac`.
 #SBATCH --time=0-02:00:00
 #SBATCH --job-name=eeg2graph-smoke
 #SBATCH --output=logs/eeg2graph-smoke-%J.out
