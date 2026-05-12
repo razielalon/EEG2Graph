@@ -3,7 +3,8 @@
 ### Submit from the cluster's manager node with `conda` deactivated:
 ###     sbatch train_smoke.sbatch
 
-#SBATCH --partition=main
+#SBATCH --partition=course                        ### course user (student/lab account); use 'main' only if your account has 'main' qos for GPU
+#SBATCH --qos=course
 #SBATCH --time=0-02:00:00
 #SBATCH --job-name=eeg2graph-smoke
 #SBATCH --output=logs/eeg2graph-smoke-%J.out
