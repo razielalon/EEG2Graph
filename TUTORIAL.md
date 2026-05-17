@@ -346,6 +346,16 @@ Four methods:
   `3e-5`. **If BART is frozen, the BART group is omitted** — otherwise
   AdamW would still allocate momentum/variance state for parameters it
   never updates. `param_groups` therefore returns either one or two groups.
+  Used during Phase 1 (warmup, BART frozen).
+- **`param_groups_llrd(bridge_lr, bart_lr, bridge_wd, bart_wd, llrd_gamma)`** —
+  layer-wise LR decay for Phase 2 (post-unfreeze). Returns the bridge group
+  plus one group per BART layer (12 enc + 12 dec) plus one embeddings group
+  (~26 groups total). Each layer `k` below the top gets
+  `bart_lr * llrd_gamma**k`; embeddings (tied to `lm_head` via
+  `model.shared.weight`) get the smallest LR. `lm_head.weight` and
+  `model.shared.weight` are the same Parameter — deduplicated via `id(p)`
+  so they land in the embeddings group exactly once. Without dedup, AdamW
+  would error on duplicate Parameter references.
 
 **What you'll *not* find here:** no custom `<bos>/<eos>/<pad>` constants, no
 label-smoothing inside the forward pass, no beam search logic, no
@@ -481,8 +491,12 @@ What actually happens:
    (Linear 840 → 1024 + LN + Dropout).
 4. If `--freeze_bart`, all REBEL params get `requires_grad=False` and
    `param_groups` returns only the Bridge group.
-5. **`AdamW` with 1 or 2 param groups** — bridge_lr on Bridge,
-   bart_lr on REBEL (if trainable).
+5. **`AdamW`** — Phase 1: 1 bridge group only, `CosineAnnealingLR` over
+   `warmup_epochs`. Phase 2 (after the unfreeze transition): ~26 LLRD
+   groups via `param_groups_llrd`, with `LambdaLR` doing a linear warmup
+   for the BART groups (0 → target over `bart_warmup_epochs`) before
+   cosine decay. The bridge group skips the second warmup but its LR
+   resets to `0.3 * bridge_lr` at the transition.
 6. **Per epoch:**
    - `train_epoch` iterates every batch. For each batch:
      - `src` = `(B, S, 840)`, `src_mask` = `(B, S)`, `tgt` = `(B, T-1)`.
@@ -595,9 +609,21 @@ copying checkpoints around.
   vocab. The constructor only calls `resize_token_embeddings` if the
   tokenizer size drifts away from the embedding table — a defensive no-op
   in the normal case.
-- **Differential LRs:** Bridge at `3e-4`, REBEL at `3e-5`. Without this,
-  REBEL forgets its pretraining rapidly. With it, REBEL makes small
-  corrections while Bridge learns from scratch.
+- **Differential LRs + LLRD:** Bridge at `3e-4`, REBEL top layers at
+  `3e-5`, REBEL lower layers progressively smaller via layer-wise LR
+  decay (`llrd_gamma=0.8`, so the bottom encoder layer trains at
+  `~3e-5 * 0.8**11 ≈ 2.6e-6`, embeddings at `~3e-5 * 0.8**12 ≈ 2.1e-6`).
+  Top layers can specialize for the EEG→triplet task; lower layers and
+  embeddings (which carry most of REBEL's pretrained knowledge) are
+  protected from drift.
+- **BART LR warmup at unfreeze:** when BART thaws after the bridge-only
+  warmup, its LR linearly ramps from 0 to its LLRD-scaled target over
+  `--bart_warmup_epochs` (default 3) before cosine decay starts.
+  Without this ramp, the unfrozen BART starts at full `3e-5` and rapidly
+  memorizes the small training set — the classic post-unfreeze
+  overfitting cliff. `patience_counter` is suppressed during the warmup
+  window so early stopping doesn't trigger on the transient val-loss
+  bump.
 - **`--freeze_bart` option:** useful for CPU/smoke runs where training
   REBEL itself isn't realistic, and as a strong baseline — if the frozen
   setup already hits a given F1, any unfrozen improvement has to beat that.
