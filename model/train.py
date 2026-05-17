@@ -20,6 +20,7 @@ Usage:
 
 import os
 import json
+import math
 import argparse
 import time
 
@@ -27,7 +28,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR
 
 from vocabulary import delinearize, save_tokenizer, STRUCT_TOKENS
 from eeg_graph_dataset import build_dataloaders
@@ -232,6 +233,8 @@ def main(args):
         bart_name=args.bart_name,
         dropout=args.dropout,
         bridge_layers=args.bridge_layers,
+        bart_dropout=args.bart_dropout,
+        bart_attention_dropout=args.bart_attention_dropout,
     ).to(device)
 
     if args.freeze_bart:
@@ -273,6 +276,7 @@ def main(args):
     patience_counter = 0
     history = []
 
+    phase2_start_epoch = None  # set at the unfreeze transition
     for epoch in range(1, args.epochs + 1):
         t0 = time.time()
 
@@ -280,16 +284,42 @@ def main(args):
         if warmup_active and epoch == args.warmup_epochs + 1:
             model.unfreeze_bart()
             optimizer = AdamW(
-                model.param_groups(args.bridge_lr * 0.3, args.bart_lr, args.weight_decay),
+                model.param_groups_llrd(
+                    bridge_lr=args.bridge_lr * 0.3,
+                    bart_lr=args.bart_lr,
+                    bridge_wd=args.weight_decay,
+                    bart_wd=args.bart_weight_decay,
+                    llrd_gamma=args.llrd_gamma,
+                ),
                 betas=(0.9, 0.98),
             )
             remaining = args.epochs - args.warmup_epochs
-            scheduler = CosineAnnealingLR(optimizer, T_max=max(remaining, 1),
-                                          eta_min=args.bart_lr * 0.01)
-            best_val_loss = float("inf")
-            patience_counter = 0
+            W = max(args.bart_warmup_epochs, 0)
+
+            def _bridge_lambda(e, _r=remaining):
+                # pure cosine over remaining epochs (no second warmup for bridge)
+                t = min(e, max(_r - 1, 0))
+                return 0.5 * (1 + math.cos(math.pi * t / max(_r - 1, 1)))
+
+            def _bart_lambda(e, _W=W, _r=remaining):
+                if e < _W:
+                    return (e + 1) / max(_W, 1)  # linear warmup: 1/W .. 1
+                progress = (e - _W) / max(_r - _W - 1, 1)
+                progress = min(progress, 1.0)
+                return 0.5 * (1 + math.cos(math.pi * progress))
+
+            lambdas = [
+                _bart_lambda if g.get("name", "").startswith("bart_") else _bridge_lambda
+                for g in optimizer.param_groups
+            ]
+            scheduler = LambdaLR(optimizer, lr_lambda=lambdas)
+
+            patience_counter = 0  # keep best_val_loss continuous, just reset counter
+            phase2_start_epoch = epoch
             n_total = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            print(f"\n  Phase 2: BART unfrozen ({n_total:,} trainable params, {remaining} epochs)")
+            n_groups = len(optimizer.param_groups)
+            print(f"\n  Phase 2: BART unfrozen ({n_total:,} trainable params, {n_groups} LLRD groups, "
+                  f"{remaining} epochs, BART warmup={W} epochs, llrd_gamma={args.llrd_gamma})")
             warmup_active = False
 
         train_loss = train_epoch(
@@ -307,9 +337,16 @@ def main(args):
             )
 
         elapsed = time.time() - t0
-        lrs = [pg["lr"] for pg in optimizer.param_groups]
+        bridge_lr_log = 0.0
+        bart_lrs = []
+        for pg in optimizer.param_groups:
+            if pg.get("name") == "bridge":
+                bridge_lr_log = pg["lr"]
+            else:
+                bart_lrs.append(pg["lr"])
+        bart_lr_max = max(bart_lrs) if bart_lrs else 0.0
+        bart_lr_min = min(bart_lrs) if bart_lrs else 0.0
 
-        bart_lr_log = lrs[1] if len(lrs) > 1 else 0.0
         log = {
             "epoch": epoch,
             "train_loss": train_loss,
@@ -317,8 +354,9 @@ def main(args):
             "val_f1": val_metrics.get("f1", 0),
             "val_precision": val_metrics.get("precision", 0),
             "val_recall": val_metrics.get("recall", 0),
-            "lr_bridge": lrs[0],
-            "lr_bart": bart_lr_log,
+            "lr_bridge": bridge_lr_log,
+            "lr_bart_max": bart_lr_max,
+            "lr_bart_min": bart_lr_min,
             "time": elapsed,
         }
         history.append(log)
@@ -328,19 +366,26 @@ def main(args):
               f"val_loss={val_metrics.get('loss', 0):.4f} | "
               f"val_F1={val_metrics.get('f1', 0):.4f} "
               f"(P={val_metrics.get('precision', 0):.3f} R={val_metrics.get('recall', 0):.3f}) | "
-              f"lr=[{lrs[0]:.2e}, {bart_lr_log:.2e}] | {elapsed:.1f}s")
+              f"lr=[bridge={bridge_lr_log:.2e}, bart={bart_lr_min:.2e}..{bart_lr_max:.2e}] | "
+              f"{elapsed:.1f}s")
 
         # Diagnostic: show sample predictions periodically
         if epoch % 10 == 0 and val_preds and val_golds:
             print("    Sample predictions:")
             _log_sample_predictions(val_preds, val_golds, n=3)
 
-        # Early stopping on val loss
+        # Early stopping on val loss. Suppress the patience counter during the
+        # BART linear-warmup window — val loss is expected to fluctuate while
+        # BART thaws and would otherwise trigger early stop spuriously.
+        in_bart_warmup_window = (
+            phase2_start_epoch is not None
+            and epoch < phase2_start_epoch + max(args.bart_warmup_epochs, 0)
+        )
         val_loss = val_metrics.get("loss", float("inf"))
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_counter = 0
-        else:
+        elif not in_bart_warmup_window:
             patience_counter += 1
 
         # Checkpoint best
@@ -447,18 +492,39 @@ if __name__ == "__main__":
     parser.add_argument("--bridge_lr", type=float, default=3e-4,
                         help="Learning rate for the Bridge projection")
     parser.add_argument("--bart_lr", type=float, default=3e-5,
-                        help="Learning rate for BART (much lower — mostly frozen)")
+                        help="Peak learning rate for top BART layers (LLRD-decayed for "
+                             "lower layers, see --llrd_gamma)")
     parser.add_argument("--freeze_bart", action="store_true",
                         help="Freeze BART/REBEL entirely and train only the bridge. "
                              "Recommended for CPU runs and small-data regimes.")
     parser.add_argument("--warmup_epochs", type=int, default=10,
                         help="Freeze BART for the first N epochs (bridge-only warmup). "
                              "Set to 0 to disable. Ignored if --freeze_bart is set.")
+    parser.add_argument("--bart_warmup_epochs", type=int, default=3,
+                        help="After BART unfreezes, linearly ramp its LR from 0 to the "
+                             "target over N epochs to avoid the post-unfreeze overfitting "
+                             "cliff. 0 disables the ramp (cold-start at full LR).")
+    parser.add_argument("--llrd_gamma", type=float, default=0.8,
+                        help="Layer-wise LR decay factor for BART. Top encoder/decoder "
+                             "layers get bart_lr; layer k below the top gets "
+                             "bart_lr * llrd_gamma**k. Embeddings get the smallest LR. "
+                             "1.0 = no decay.")
+    parser.add_argument("--bart_dropout", type=float, default=0.2,
+                        help="Override REBEL's native hidden/activation dropout (default "
+                             "0.1) — higher values regularize fine-tuning on small data.")
+    parser.add_argument("--bart_attention_dropout", type=float, default=0.2,
+                        help="Override REBEL's native attention dropout.")
+    parser.add_argument("--bart_weight_decay", type=float, default=0.05,
+                        help="Weight decay applied to BART param groups (separate from "
+                             "--weight_decay, which only applies to the bridge).")
     parser.add_argument("--bridge_layers", type=int, default=2,
                         help="Number of bridge projection layers (1=linear, 2+=MLP with GELU)")
     parser.add_argument("--patience", type=int, default=20,
-                        help="Early stopping patience on val loss (0=disabled)")
-    parser.add_argument("--weight_decay", type=float, default=0.01)
+                        help="Early stopping patience on val loss (0=disabled). "
+                             "Suppressed during the BART warmup window.")
+    parser.add_argument("--weight_decay", type=float, default=0.01,
+                        help="Weight decay for the bridge group only; BART uses "
+                             "--bart_weight_decay.")
     parser.add_argument("--grad_clip", type=float, default=1.0)
     parser.add_argument("--label_smoothing", type=float, default=0.1)
     parser.add_argument("--save_every", type=int, default=10)

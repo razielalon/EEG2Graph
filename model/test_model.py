@@ -344,12 +344,116 @@ def test_model_param_groups():
     groups = model.param_groups(bridge_lr=3e-4, bart_lr=3e-5, weight_decay=0.01)
     assert len(groups) == 2
     assert groups[0]["lr"] == 3e-4
+    assert groups[0]["name"] == "bridge"
     assert groups[1]["lr"] == 3e-5
+    assert groups[1]["name"] == "bart"
     # Bridge params are a strict subset; bart has many more.
     bridge_n = sum(p.numel() for p in groups[0]["params"])
     bart_n = sum(p.numel() for p in groups[1]["params"])
     assert bart_n > bridge_n * 10
     print("  PASS: test_model_param_groups")
+
+
+def test_model_param_groups_llrd():
+    """LLRD: top BART layers get full bart_lr, lower layers get gamma**k decayed,
+    embeddings get the smallest. lm_head (tied to model.shared) must appear in
+    exactly one group across the full optimizer."""
+    model = get_model()
+    bart_lr = 3e-5
+    gamma = 0.8
+    groups = model.param_groups_llrd(
+        bridge_lr=3e-4, bart_lr=bart_lr,
+        bridge_wd=0.01, bart_wd=0.05,
+        llrd_gamma=gamma,
+    )
+
+    names = [g["name"] for g in groups]
+    assert names[0] == "bridge"
+    assert "bart_embed" in names
+    # BART-large: 12 enc + 12 dec layers.
+    n_enc = model.bart.config.encoder_layers
+    n_dec = model.bart.config.decoder_layers
+    for i in range(n_enc):
+        assert f"bart_enc_{i}" in names, f"missing bart_enc_{i}"
+    for i in range(n_dec):
+        assert f"bart_dec_{i}" in names, f"missing bart_dec_{i}"
+
+    by_name = {g["name"]: g for g in groups}
+
+    # Top encoder/decoder layers get the full bart_lr.
+    assert abs(by_name[f"bart_enc_{n_enc - 1}"]["lr"] - bart_lr) < 1e-12
+    assert abs(by_name[f"bart_dec_{n_dec - 1}"]["lr"] - bart_lr) < 1e-12
+    # Bottom encoder layer is gamma**(n_enc-1) below the top.
+    expected_bottom = bart_lr * (gamma ** (n_enc - 1))
+    assert abs(by_name["bart_enc_0"]["lr"] - expected_bottom) < 1e-12
+    # Embeddings get the smallest LR (gamma**max_depth).
+    expected_embed = bart_lr * (gamma ** max(n_enc, n_dec))
+    assert abs(by_name["bart_embed"]["lr"] - expected_embed) < 1e-12
+
+    # Adjacent encoder layers differ by exactly gamma.
+    for i in range(1, n_enc):
+        ratio = by_name[f"bart_enc_{i}"]["lr"] / by_name[f"bart_enc_{i - 1}"]["lr"]
+        assert abs(ratio - (1.0 / gamma)) < 1e-9, f"enc layer {i}/{i-1} ratio {ratio}"
+
+    # No Parameter appears in two groups (tied lm_head/shared weight dedup).
+    seen = set()
+    for g in groups:
+        for p in g["params"]:
+            assert id(p) not in seen, f"Parameter duplicated across groups (id={id(p)})"
+            seen.add(id(p))
+
+    # Total trainable params across all groups == total in model.
+    total_in_groups = sum(p.numel() for g in groups for p in g["params"])
+    total_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    assert total_in_groups == total_trainable, \
+        f"group total {total_in_groups} != model trainable {total_trainable}"
+
+    # Weight decay split: bridge uses bridge_wd, all BART groups use bart_wd.
+    assert by_name["bridge"]["weight_decay"] == 0.01
+    for n in names:
+        if n.startswith("bart_"):
+            assert by_name[n]["weight_decay"] == 0.05
+
+    print("  PASS: test_model_param_groups_llrd")
+
+
+def test_phase2_bart_warmup_lambda():
+    """LambdaLR with bart_warmup ramps from 1/W at e=0 to 1 at e=W-1, then
+    cosine-decays to ~0 at the final epoch. No cold-start at full LR."""
+    W = 3
+    remaining = 70
+
+    def _bart_lambda(e):
+        if e < W:
+            return (e + 1) / max(W, 1)
+        progress = (e - W) / max(remaining - W - 1, 1)
+        progress = min(progress, 1.0)
+        return 0.5 * (1 + np.cos(np.pi * progress))
+
+    # Warmup window
+    assert abs(_bart_lambda(0) - 1 / 3) < 1e-9
+    assert abs(_bart_lambda(1) - 2 / 3) < 1e-9
+    assert abs(_bart_lambda(2) - 1.0) < 1e-9
+    # Cosine start (just past warmup)
+    assert abs(_bart_lambda(3) - 1.0) < 1e-6
+    # Final epoch — should be ~0
+    assert _bart_lambda(remaining - 1) < 1e-3
+    # No epoch yields a multiplier above 1.0
+    for e in range(remaining):
+        assert _bart_lambda(e) <= 1.0 + 1e-9
+    print("  PASS: test_phase2_bart_warmup_lambda")
+
+
+def test_bart_dropout_override():
+    """When bart_dropout/bart_attention_dropout are passed, they propagate
+    to the BART config (and thus to constructed dropout modules)."""
+    from eeg_graph_model import EEGBartModel
+    tok = get_tokenizer()
+    m = EEGBartModel(tok, eeg_dim=840, dropout=0.0,
+                     bart_dropout=0.25, bart_attention_dropout=0.15)
+    assert abs(m.bart.config.dropout - 0.25) < 1e-9
+    assert abs(m.bart.config.attention_dropout - 0.15) < 1e-9
+    print("  PASS: test_bart_dropout_override")
 
 
 # =============================================================================
@@ -418,6 +522,9 @@ if __name__ == "__main__":
         test_model_uses_rebel_dim,
         test_no_embedding_resize_needed,
         test_model_param_groups,
+        test_model_param_groups_llrd,
+        test_phase2_bart_warmup_lambda,
+        test_bart_dropout_override,
         # Integration
         test_end_to_end_with_real_data,
     ]

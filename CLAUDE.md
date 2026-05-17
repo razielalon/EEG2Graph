@@ -78,7 +78,13 @@ These are enforced by tests in `model/test_model.py` and reflect deliberate desi
 - **`<triplet>`, `<subj>`, `<obj>` are already in REBEL's vocab as single tokens** — never call `tokenizer.add_tokens(...)` for them, and don't `resize_token_embeddings` (the model constructor has a defensive resize only if sizes drift).
 - **Bridge output dim = 1024** (BART-large's `d_model`), not 768. Asserted by `test_model_uses_rebel_dim`.
 - **Bridge has no GELU** — `Linear → LayerNorm → Dropout` only. Adding a nonlinearity in front of REBEL's first Transformer block hurt early training.
-- **Differential LRs:** bridge `3e-4`, BART `3e-5`. When `--freeze_bart` is set, `param_groups` must return **one** group, not two — AdamW would otherwise allocate momentum/variance state for frozen params.
+- **Differential LRs with phased training:**
+  - **Phase 1 (warmup, BART frozen):** single bridge group (`param_groups`) + `CosineAnnealingLR` over `--warmup_epochs`. When `--freeze_bart` is set or BART is frozen, `param_groups` must return **one** group, not two — AdamW would otherwise allocate momentum/variance state for frozen params.
+  - **Phase 2 (post-unfreeze):** layer-wise LR decay (`param_groups_llrd`) returns ~26 groups: bridge + 12 enc + 12 dec + 1 embeddings. Top encoder/decoder layers get full `--bart_lr`; layer `k` below the top gets `bart_lr * llrd_gamma**k`. Embeddings (tied to `lm_head`) get the smallest LR. `lm_head.weight is model.shared.weight` — dedup via `id(p)` so the same Parameter never appears in two groups (AdamW would crash).
+  - **BART LR warmup at unfreeze:** `LambdaLR` linearly ramps BART groups from `1/W` to `1.0` over `--bart_warmup_epochs` (default 3) before cosine decay. Without this ramp, BART jumps from LR=0 (frozen) to full `--bart_lr` in one step and overfits within a few epochs on the small ZuCo dataset.
+  - **Separate weight decay:** bridge uses `--weight_decay` (0.01); BART uses `--bart_weight_decay` (0.05) to regularize fine-tuning.
+  - **Patience suppression:** `patience_counter` does not tick during the BART warmup window — val loss is expected to fluctuate while BART thaws.
+- **BART dropout overrides:** `--bart_dropout` and `--bart_attention_dropout` (defaults 0.2 / 0.2) raise REBEL's native 0.1 dropout to regularize fine-tuning. Passed through `BartForConditionalGeneration.from_pretrained(..., dropout=..., attention_dropout=..., activation_dropout=...)` so the config and constructed modules stay in sync.
 - **Splits are grouped by sentence text**, not by subject. The same sentence read by multiple subjects must stay in one split.
 - **Tokenizer lives in `output_dir/tokenizer/`, not inside the `.pt` checkpoint.** Keep them together when copying checkpoints.
 
