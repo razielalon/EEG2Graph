@@ -34,6 +34,17 @@ python train.py \
     --save_every 10 \
     --warmup_epochs 10 \
     --bridge_layers 2 \
-    --patience 20
+    --patience 20 \
+    --bridge_lr 3e-4 \
+    --bart_lr 3e-5 \
+    --weight_decay 0.01 \
+    --label_smoothing 0.1 \
+    --dropout 0.3 \
+    `### Phase 2 (post-unfreeze) regularization — see TUTORIAL.md §10` \
+    --bart_warmup_epochs 3 \
+    --llrd_gamma 0.8 \
+    --bart_dropout 0.2 \
+    --bart_attention_dropout 0.2 \
+    --bart_weight_decay 0.05
 
 echo "END=$(date)"
