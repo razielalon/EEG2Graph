@@ -271,8 +271,13 @@ def main(args):
     print("Training")
     print("=" * 60)
 
-    best_val_f1 = -1.0  # ensure the first epoch always saves a checkpoint
+    best_val_f1 = -1.0
     best_val_loss = float("inf")
+    # Checkpoint selection key: (val_f1, -val_loss). F1 dominates; when F1 is
+    # uninformative (e.g. stuck at 0.0 on a small/hard run) the tie breaks on
+    # the lowest val_loss, so best_model.pt tracks the genuinely-best epoch
+    # instead of freezing at epoch 1. Starts below any real score.
+    best_ckpt_score = (-1.0, float("-inf"))
     patience_counter = 0
     history = []
 
@@ -336,6 +341,14 @@ def main(args):
                 num_beams=1,  # greedy during training for speed
             )
 
+        train_metrics = {}
+        if args.eval_train and "train" in loaders:
+            train_metrics, _, _ = evaluate(
+                model, loaders["train"], criterion, tokenizer, device,
+                max_gen_len=args.max_tgt_len,
+                num_beams=1,
+            )
+
         elapsed = time.time() - t0
         bridge_lr_log = 0.0
         bart_lrs = []
@@ -350,6 +363,9 @@ def main(args):
         log = {
             "epoch": epoch,
             "train_loss": train_loss,
+            "train_f1": train_metrics.get("f1", 0),
+            "train_precision": train_metrics.get("precision", 0),
+            "train_recall": train_metrics.get("recall", 0),
             "val_loss": val_metrics.get("loss", 0),
             "val_f1": val_metrics.get("f1", 0),
             "val_precision": val_metrics.get("precision", 0),
@@ -361,8 +377,14 @@ def main(args):
         }
         history.append(log)
 
+        train_f1_str = ""
+        if args.eval_train:
+            train_f1_str = (f"train_F1={train_metrics.get('f1', 0):.4f} "
+                            f"(P={train_metrics.get('precision', 0):.3f} "
+                            f"R={train_metrics.get('recall', 0):.3f}) | ")
         print(f"  Epoch {epoch:3d}/{args.epochs} | "
               f"train_loss={train_loss:.4f} | "
+              f"{train_f1_str}"
               f"val_loss={val_metrics.get('loss', 0):.4f} | "
               f"val_F1={val_metrics.get('f1', 0):.4f} "
               f"(P={val_metrics.get('precision', 0):.3f} R={val_metrics.get('recall', 0):.3f}) | "
@@ -388,19 +410,23 @@ def main(args):
         elif not in_bart_warmup_window:
             patience_counter += 1
 
-        # Checkpoint best
-        if val_metrics.get("f1", 0) > best_val_f1:
-            best_val_f1 = val_metrics["f1"]
+        # Checkpoint best — see best_ckpt_score above.
+        ckpt_score = (val_metrics.get("f1", 0.0), -val_loss)
+        if ckpt_score > best_ckpt_score:
+            best_ckpt_score = ckpt_score
+            best_val_f1 = val_metrics.get("f1", 0.0)
             torch.save({
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "val_f1": best_val_f1,
+                "val_loss": val_loss,
                 "args": vars(args),
                 "bart_name": args.bart_name,
                 "struct_tokens": STRUCT_TOKENS,
             }, os.path.join(args.output_dir, "best_model.pt"))
-            print(f"    New best val F1: {best_val_f1:.4f}")
+            print(f"    New best checkpoint: val_F1={best_val_f1:.4f}, "
+                  f"val_loss={val_loss:.4f}")
 
             if val_preds and val_golds:
                 examples = []
@@ -528,6 +554,10 @@ if __name__ == "__main__":
     parser.add_argument("--grad_clip", type=float, default=1.0)
     parser.add_argument("--label_smoothing", type=float, default=0.1)
     parser.add_argument("--save_every", type=int, default=10)
+    parser.add_argument("--eval_train", action="store_true",
+                        help="Each epoch, also run generation-based triplet F1 on the "
+                             "training set (logged as train_F1). Diagnostic for "
+                             "tiny-overfit tests — slow on the full train set.")
 
     # Data
     parser.add_argument("--max_src_len", type=int, default=128)

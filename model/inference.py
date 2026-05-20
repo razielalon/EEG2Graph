@@ -23,6 +23,7 @@ import torch
 
 from vocabulary import load_tokenizer, delinearize
 from eeg_graph_model import EEGBartModel
+from eeg_graph_dataset import fixation_attention_mask
 
 
 def load_model(checkpoint_path, tokenizer, device):
@@ -52,12 +53,17 @@ def predict_batch(model, eeg_list, meta_list, tokenizer, device, num_beams=1, ma
     B = len(eeg_list)
 
     src = torch.zeros(B, max_src, feat_dim, device=device)
-    src_mask = torch.zeros(B, max_src, dtype=torch.bool, device=device)
+    real_mask = torch.zeros(B, max_src, dtype=torch.bool, device=device)
+    fix_mask = torch.zeros(B, max_src, dtype=torch.bool, device=device)
 
     for i, eeg in enumerate(eeg_list):
         n = eeg.shape[0]
         src[i, :n] = torch.tensor(eeg, dtype=torch.float32)
-        src_mask[i, :n] = True
+        real_mask[i, :n] = True
+        hf = meta_list[i].get("has_fixation", [True] * n)[:n]
+        fix_mask[i, :len(hf)] = torch.tensor(hf, dtype=torch.bool, device=device)
+
+    src_mask = fixation_attention_mask(real_mask, fix_mask)
 
     generated = model.generate(src, src_mask, max_len=max_len, num_beams=num_beams)
 

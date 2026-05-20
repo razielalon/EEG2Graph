@@ -17,7 +17,7 @@ model/              Phase B: dataset, model, training, inference, tests
 tests/              processed_data_test.py — sanity checks for processed_zuco*/
 processed_zuco{,1,2}/   Output of Phase A (gitignored)
 checkpoints*/       Training outputs (best_model.pt + tokenizer/ subdir)
-train_{smoke,full}.sbatch   Slurm jobs for BGU CIS cluster
+train_{smoke,full,overfit}.sbatch   Slurm jobs for BGU CIS cluster
 ```
 
 ## Common commands
@@ -51,7 +51,10 @@ python train.py \
     --output_dir ../checkpoints --epochs 80 --batch_size 16 \
     --bridge_lr 3e-4 --bart_lr 3e-5
 ```
-On the BGU CIS Slurm cluster, submit `train_smoke.sbatch` or `train_full.sbatch` instead (do not run `cd` in the sbatch — they already `cd "$HOME/EEG2Graph/model"`).
+On the BGU CIS Slurm cluster, submit `train_smoke.sbatch`, `train_full.sbatch`, or `train_overfit.sbatch` instead (do not run `cd` in the sbatch — they already `cd "$HOME/EEG2Graph/model"`).
+
+### Overfit diagnostic
+`--eval_train` makes `train.py` run generation-based triplet F1 on the training set each epoch (logged as `train_F1`). `train_overfit.sbatch` uses it to test whether the full model can memorize 32 samples — `train_F1 → ~1.0` means the pipeline is wired correctly and the real failure is generalization; `train_F1` stuck near 0 while `train_loss → 0` means a generation/conditioning bug. `--eval_train` is slow on the full train set; reserve it for small `--limit_train` runs.
 
 ### Inference
 ```bash
@@ -90,7 +93,7 @@ These are enforced by tests in `model/test_model.py` and reflect deliberate desi
 
 ## Data conventions
 
-- **Per-sample EEG**: object array of shape `(n_words, 840)` = 105 channels × 8 frequency bands, extracted from the first gaze-duration (GD) fixation window. Skipped words are zero-padded and tracked in a `has_fixation` boolean mask (carried through the dataset but not yet consumed by the model — reserved for attention-bias experiments).
+- **Per-sample EEG**: object array of shape `(n_words, 840)` = 105 channels × 8 frequency bands, extracted from the first gaze-duration (GD) fixation window. Skipped words are zero-padded and tracked in a `has_fixation` boolean mask. `collate_fn` ANDs `has_fixation` into the encoder attention mask via `fixation_attention_mask`, so the `src_mask` the model receives covers only real, fixated words — unfixated words are all-zero vectors and would otherwise dilute attention with ~40% constant noise tokens. A row that would become all-False falls back to the non-pad mask. `inference.py` builds the same mask.
 - **Normalization** is per-subject z-score, computed from fixated words only.
 - **`sentence_triplets.json`** is keyed by exact sentence text; the dataset joins to each `{split}_meta.json` entry via `meta[i]["text"]`. Both the dict-keyed and list-of-objects formats are supported by `EEGGraphDataset`.
 - **ZuCo 1.0 ships as MATLAB v5** (use `scipy.io.loadmat`), **ZuCo 2.0 ships as MATLAB v7.3** (HDF5, use `h5py`). `_is_matlab_v73()` in `preprocess_zuco.py` sniffs the header and dispatches.
@@ -101,10 +104,10 @@ These are enforced by tests in `model/test_model.py` and reflect deliberate desi
 
 ## Working with the model
 
-- `EEGBartModel.forward(src, src_mask, tgt)` is teacher-forced; `src_mask` must be `.long()` for HF's attention mask. The encoder embeddings are bypassed via `inputs_embeds=bridge(src)`.
+- `EEGBartModel.forward(src, src_mask, tgt)` is teacher-forced; `src_mask` must be `.long()` for HF's attention mask (`collate_fn` already produces it fixation-aware — see Data conventions). The encoder embeddings are bypassed via `inputs_embeds=bridge(src)`.
 - `collate_fn` performs the teacher-forcing shift: `tgt = target_ids[:-1]`, `tgt_labels = target_ids[1:]`. Don't shift again elsewhere.
 - `model.generate(..., num_beams=1)` is greedy; `>1` activates beam search with `early_stopping=True`. Same API.
-- `train.py` initializes `best_val_f1 = -1.0` so at least one checkpoint always saves (val_F1 can stay at 0.0 on small subsets).
+- `train.py` selects `best_model.pt` by the tuple `(val_F1, -val_loss)` — F1 dominates, and when F1 is uninformative (stuck at 0.0 on small/hard runs) the lowest val_loss breaks the tie, so the checkpoint tracks the genuinely-best epoch instead of freezing at epoch 1. The first epoch always saves (the initial score is below any real one).
 
 ## Tooling
 

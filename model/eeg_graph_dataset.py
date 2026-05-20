@@ -113,14 +113,30 @@ class EEGGraphDataset(Dataset):
 # Collate: pad both encoder and decoder sequences
 # =============================================================================
 
+def fixation_attention_mask(real_mask, fixation_mask):
+    """
+    Encoder attention mask = real (non-pad) AND fixated word slots.
+
+    Unfixated words are all-zero EEG vectors that carry no signal; attending
+    to them lets BART pool over ~40% constant noise tokens. Combining the
+    masks here removes them. Any row that would become all-False falls back
+    to the non-pad mask so attention never sees an empty sequence.
+    """
+    attn = real_mask & fixation_mask
+    empty = attn.sum(dim=-1) == 0
+    if empty.any():
+        attn[empty] = real_mask[empty]
+    return attn
+
+
 def collate_fn(batch, pad_id):
     """
     Pads EEG (encoder) and target (decoder) sequences.
 
     Returns dict with:
         - src:         (B, max_src, 840)
-        - src_mask:    (B, max_src) — True for real tokens
-        - src_fixation:(B, max_src)
+        - src_mask:    (B, max_src) — encoder attention mask (real AND fixated)
+        - src_fixation:(B, max_src) — raw per-word fixation mask
         - tgt:         (B, max_tgt - 1) — decoder input (all but last token)
         - tgt_labels:  (B, max_tgt - 1) — decoder target (all but first token)
         - tgt_mask:    (B, max_tgt - 1) — True for non-pad
@@ -156,7 +172,7 @@ def collate_fn(batch, pad_id):
 
     return {
         "src": src,
-        "src_mask": src_mask,
+        "src_mask": fixation_attention_mask(src_mask, src_fix),
         "src_fixation": src_fix,
         "tgt": tgt_in,
         "tgt_labels": tgt_lbl,

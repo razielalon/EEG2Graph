@@ -249,6 +249,64 @@ def test_collate_fn():
     print("  PASS: test_collate_fn")
 
 
+def test_collate_fixation_mask():
+    """collate_fn's src_mask = real AND fixated word slots; an all-unfixated
+    sentence falls back to the non-pad mask so no row is ever all-False."""
+    tok = get_tokenizer()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        feat_dim = 840
+        texts = [
+            "Barack Obama was born in Hawaii .",
+            "Albert Einstein developed the theory of relativity .",
+            "Some other sentence here .",
+        ]
+        n_words = [5, 6, 4]
+        fixations = [
+            [True, False, True, False, True],
+            [False, True, True, False, True, False],
+            [False, False, False, False],            # all unfixated -> guard
+        ]
+        eeg_list = [np.random.randn(nw, feat_dim).astype(np.float32) for nw in n_words]
+        np.save(os.path.join(tmpdir, "train_eeg.npy"),
+                np.array(eeg_list, dtype=object), allow_pickle=True)
+
+        meta = []
+        for i in range(3):
+            meta.append({
+                "text": texts[i],
+                "words": texts[i].split()[:n_words[i]],
+                "subject_id": "YAC",
+                "task": "task1-NR",
+                "has_fixation": fixations[i],
+                "n_words": n_words[i],
+            })
+        with open(os.path.join(tmpdir, "train_meta.json"), "w") as f:
+            json.dump(meta, f)
+        triplets_path = os.path.join(tmpdir, "triplets.json")
+        with open(triplets_path, "w") as f:
+            json.dump(SAMPLE_TRIPLETS_DICT, f)
+
+        ds = EEGGraphDataset(
+            os.path.join(tmpdir, "train_eeg.npy"),
+            os.path.join(tmpdir, "train_meta.json"),
+            triplets_path, tok,
+        )
+        batch = collate_fn([ds[0], ds[1], ds[2]], pad_id=tok.pad_token_id)
+        sm = batch["src_mask"]
+
+        # Mask matches the fixation pattern over real words.
+        assert sm[0, :5].tolist() == [True, False, True, False, True]
+        assert sm[1, :6].tolist() == [False, True, True, False, True, False]
+        # Padding past the real words is always False.
+        assert sm[0, 5:].sum().item() == 0
+        # All-unfixated sentence falls back to the non-pad mask (its 4 words).
+        assert sm[2, :4].tolist() == [True, True, True, True]
+        assert sm[2, 4:].sum().item() == 0
+        # No row is ever fully masked out.
+        assert (sm.sum(dim=1) > 0).all()
+    print("  PASS: test_collate_fixation_mask")
+
+
 def test_build_dataloaders_with_real_data():
     data_subdir = os.environ.get("EEG_DATA_DIR", "processed_zuco2")
     processed_dir = os.path.join(os.path.dirname(__file__), "..", data_subdir)
@@ -514,6 +572,7 @@ if __name__ == "__main__":
         test_dataset_dict_format,
         test_dataset_list_format,
         test_collate_fn,
+        test_collate_fixation_mask,
         test_build_dataloaders_with_real_data,
         # Model
         test_model_forward,
