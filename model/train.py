@@ -456,7 +456,17 @@ def main(args):
         print("Test Evaluation (beam search)")
         print("=" * 60)
 
-        ckpt = torch.load(os.path.join(args.output_dir, "best_model.pt"), map_location=device)
+        # Free optimizer state before reloading the checkpoint. AdamW keeps
+        # per-parameter momentum + variance for every trainable param (408M
+        # with BART unfrozen); together with the live model and grads that can
+        # leave a small GPU too full for torch.load to materialize the
+        # checkpoint on cuda. Drop the optimizer, then load to CPU and copy
+        # into the already-on-GPU model in place (no second GPU allocation).
+        del optimizer, scheduler
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        ckpt = torch.load(os.path.join(args.output_dir, "best_model.pt"), map_location="cpu")
         model.load_state_dict(ckpt["model_state_dict"])
 
         test_metrics, test_preds, test_golds = evaluate(

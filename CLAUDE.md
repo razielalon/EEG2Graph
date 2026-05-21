@@ -17,7 +17,7 @@ model/              Phase B: dataset, model, training, inference, tests
 tests/              processed_data_test.py — sanity checks for processed_zuco*/
 processed_zuco{,1,2}/   Output of Phase A (gitignored)
 checkpoints*/       Training outputs (best_model.pt + tokenizer/ subdir)
-train_{smoke,full,overfit}.sbatch   Slurm jobs for BGU CIS cluster
+train_{smoke,full,overfit,overfit_frozen}.sbatch   Slurm jobs for BGU CIS cluster
 ```
 
 ## Common commands
@@ -54,7 +54,7 @@ python train.py \
 On the BGU CIS Slurm cluster, submit `train_smoke.sbatch`, `train_full.sbatch`, or `train_overfit.sbatch` instead (do not run `cd` in the sbatch — they already `cd "$HOME/EEG2Graph/model"`).
 
 ### Overfit diagnostic
-`--eval_train` makes `train.py` run generation-based triplet F1 on the training set each epoch (logged as `train_F1`). `train_overfit.sbatch` uses it to test whether the full model can memorize 32 samples — `train_F1 → ~1.0` means the pipeline is wired correctly and the real failure is generalization; `train_F1` stuck near 0 while `train_loss → 0` means a generation/conditioning bug. `--eval_train` is slow on the full train set; reserve it for small `--limit_train` runs.
+`--eval_train` makes `train.py` run generation-based triplet F1 on the training set each epoch (logged as `train_F1`). `train_overfit.sbatch` uses it to test whether the full model can memorize 32 samples — `train_F1 → ~1.0` means the pipeline is wired correctly and the real failure is generalization; `train_F1` stuck near 0 while `train_loss → 0` means the decoder is solving the task as a language model (teacher-forcing shortcut) and ignoring the EEG — generation then collapses to one input-independent sequence. `train_overfit_frozen.sbatch` is the follow-up: it keeps BART frozen for the whole run so bridge → frozen REBEL is the only EEG→loss path, isolating whether the bridge can carry any signal at all when the decoder cannot fall back on its pretraining prior. `--eval_train` is slow on the full train set; reserve it for small `--limit_train` runs.
 
 ### Inference
 ```bash
