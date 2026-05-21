@@ -40,6 +40,10 @@ python train.py \
     --weight_decay 0.01 \
     --label_smoothing 0.1 \
     --dropout 0.3 \
+    `### Text-encoder alignment: direct gradient into the bridge, bypasses the decoder shortcut` \
+    --align_weight 1.0 \
+    --align_temp 0.07 \
+    --max_text_len 96 \
     `### Phase 2 (post-unfreeze) regularization — see TUTORIAL.md §10` \
     --bart_warmup_epochs 3 \
     --llrd_gamma 0.8 \

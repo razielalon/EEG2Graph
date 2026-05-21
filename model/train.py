@@ -72,6 +72,48 @@ class LabelSmoothedCE(nn.Module):
 
 
 # =============================================================================
+# Text-encoder alignment loss
+# =============================================================================
+
+def _masked_mean(h, mask):
+    """Mean-pool (B, L, D) hidden states over valid positions in a (B, L) mask."""
+    m = mask.unsqueeze(-1).to(h.dtype)
+    return (h * m).sum(dim=1) / m.sum(dim=1).clamp(min=1.0)
+
+
+def contrastive_alignment_loss(h_eeg, eeg_mask, h_text, text_mask, texts,
+                               temperature=0.07):
+    """
+    Symmetric InfoNCE between pooled EEG-encoder states and pooled
+    text-encoder states.
+
+    Pulls each sentence's EEG representation toward REBEL's own text
+    representation of that sentence and pushes it away from the other
+    sentences in the batch. This is a direct, dense gradient into the bridge
+    that bypasses the decoder entirely — so it cannot be defeated by the
+    decoder's teacher-forcing shortcut (unfrozen) or starved by a frozen
+    decoder that won't route through cross-attention.
+
+    Off-diagonal pairs that share the same sentence text are masked out of the
+    negatives: the same sentence read by two subjects is not a negative.
+    """
+    e = F.normalize(_masked_mean(h_eeg, eeg_mask), dim=-1)
+    t = F.normalize(_masked_mean(h_text, text_mask), dim=-1)
+    logits = (e @ t.t()) / temperature                       # (B, B)
+
+    B = e.size(0)
+    target = torch.arange(B, device=e.device)
+    same = torch.tensor(
+        [[a == b for b in texts] for a in texts], device=e.device
+    )
+    same.fill_diagonal_(False)
+    logits = logits.masked_fill(same, float("-inf"))         # duplicates aren't negatives
+
+    return 0.5 * (F.cross_entropy(logits, target)
+                  + F.cross_entropy(logits.t(), target))
+
+
+# =============================================================================
 # Evaluation Metrics
 # =============================================================================
 
@@ -124,9 +166,17 @@ def _log_sample_predictions(preds, golds, n=3):
 # Training Loop
 # =============================================================================
 
-def train_epoch(model, loader, criterion, optimizer, scheduler, device, grad_clip=1.0):
+def train_epoch(model, loader, criterion, optimizer, scheduler, device,
+                grad_clip=1.0, align_weight=0.0, align_temp=0.07):
+    """
+    One training epoch. Loss = label-smoothed CE + align_weight * contrastive
+    text-encoder alignment. When align_weight is 0 the teacher pass is skipped
+    entirely (original CE-only behaviour and cost).
+
+    Returns a dict with the epoch-mean total / ce / align losses.
+    """
     model.train()
-    total_loss = 0
+    tot_loss = tot_ce = tot_align = 0.0
     n_batches = 0
 
     for batch in loader:
@@ -135,21 +185,38 @@ def train_epoch(model, loader, criterion, optimizer, scheduler, device, grad_cli
         tgt = batch["tgt"].to(device)
         tgt_labels = batch["tgt_labels"].to(device)
 
-        logits = model(src, src_mask, tgt)
-        loss = criterion(logits, tgt_labels)
+        if align_weight > 0:
+            logits, h_eeg = model(src, src_mask, tgt, return_encoder_states=True)
+            ce = criterion(logits, tgt_labels)
+            text_ids = batch["text_ids"].to(device)
+            text_mask = batch["text_mask"].to(device)
+            h_text = model.encode_text(text_ids, text_mask)
+            texts = [m["text"] for m in batch["meta"]]
+            align = contrastive_alignment_loss(
+                h_eeg, src_mask, h_text, text_mask, texts, temperature=align_temp,
+            )
+            loss = ce + align_weight * align
+        else:
+            logits = model(src, src_mask, tgt)
+            ce = criterion(logits, tgt_labels)
+            align = None
+            loss = ce
 
         optimizer.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
 
-        total_loss += loss.item()
+        tot_loss += loss.item()
+        tot_ce += ce.item()
+        tot_align += align.item() if align is not None else 0.0
         n_batches += 1
 
     if scheduler is not None:
         scheduler.step()
 
-    return total_loss / max(n_batches, 1)
+    n = max(n_batches, 1)
+    return {"loss": tot_loss / n, "ce": tot_ce / n, "align": tot_align / n}
 
 
 @torch.no_grad()
@@ -213,6 +280,7 @@ def main(args):
         batch_size=args.batch_size,
         max_src_len=args.max_src_len,
         max_tgt_len=args.max_tgt_len,
+        max_text_len=args.max_text_len,
         num_workers=args.num_workers,
         bart_name=args.bart_name,
         limits=limits,
@@ -327,10 +395,12 @@ def main(args):
                   f"{remaining} epochs, BART warmup={W} epochs, llrd_gamma={args.llrd_gamma})")
             warmup_active = False
 
-        train_loss = train_epoch(
+        train_stats = train_epoch(
             model, loaders["train"], criterion, optimizer, scheduler, device,
-            grad_clip=args.grad_clip,
+            grad_clip=args.grad_clip, align_weight=args.align_weight,
+            align_temp=args.align_temp,
         )
+        train_loss = train_stats["loss"]
 
         val_metrics = {}
         val_preds = val_golds = None
@@ -363,6 +433,8 @@ def main(args):
         log = {
             "epoch": epoch,
             "train_loss": train_loss,
+            "train_ce": train_stats["ce"],
+            "train_align": train_stats["align"],
             "train_f1": train_metrics.get("f1", 0),
             "train_precision": train_metrics.get("precision", 0),
             "train_recall": train_metrics.get("recall", 0),
@@ -382,8 +454,12 @@ def main(args):
             train_f1_str = (f"train_F1={train_metrics.get('f1', 0):.4f} "
                             f"(P={train_metrics.get('precision', 0):.3f} "
                             f"R={train_metrics.get('recall', 0):.3f}) | ")
+        align_str = ""
+        if args.align_weight > 0:
+            align_str = f"align={train_stats['align']:.4f} | "
         print(f"  Epoch {epoch:3d}/{args.epochs} | "
               f"train_loss={train_loss:.4f} | "
+              f"{align_str}"
               f"{train_f1_str}"
               f"val_loss={val_metrics.get('loss', 0):.4f} | "
               f"val_F1={val_metrics.get('f1', 0):.4f} "
@@ -563,6 +639,14 @@ if __name__ == "__main__":
                              "--bart_weight_decay.")
     parser.add_argument("--grad_clip", type=float, default=1.0)
     parser.add_argument("--label_smoothing", type=float, default=0.1)
+    parser.add_argument("--align_weight", type=float, default=1.0,
+                        help="Weight of the contrastive text-encoder alignment "
+                             "loss. The bridge is trained so its EEG encoder "
+                             "states match REBEL's own encoder states for the "
+                             "gold sentence — a direct gradient that bypasses "
+                             "the decoder shortcut. 0 disables it (CE-only).")
+    parser.add_argument("--align_temp", type=float, default=0.07,
+                        help="InfoNCE temperature for the alignment loss.")
     parser.add_argument("--save_every", type=int, default=10)
     parser.add_argument("--eval_train", action="store_true",
                         help="Each epoch, also run generation-based triplet F1 on the "
@@ -572,6 +656,9 @@ if __name__ == "__main__":
     # Data
     parser.add_argument("--max_src_len", type=int, default=128)
     parser.add_argument("--max_tgt_len", type=int, default=128)
+    parser.add_argument("--max_text_len", type=int, default=96,
+                        help="Max gold-text token length for the alignment "
+                             "teacher path.")
     parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--limit_train", type=int, default=0,
                         help="If >0, use only the first N training samples (CPU sanity runs)")

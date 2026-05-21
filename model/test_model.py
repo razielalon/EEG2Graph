@@ -514,6 +514,41 @@ def test_bart_dropout_override():
     print("  PASS: test_bart_dropout_override")
 
 
+def test_text_encoder_alignment():
+    """forward(return_encoder_states=True) yields encoder states; encode_text
+    gives a detached teacher target; the contrastive alignment loss scores a
+    correct EEG/text pairing below a shuffled one."""
+    from train import contrastive_alignment_loss
+    tok = get_tokenizer()
+    model = get_model()
+
+    B, S, T = 3, 10, 8
+    src = torch.randn(B, S, 840)
+    src_mask = torch.ones(B, S, dtype=torch.bool)
+    tgt = torch.randint(0, len(tok), (B, T))
+
+    logits, h_eeg = model(src, src_mask, tgt, return_encoder_states=True)
+    assert logits.shape == (B, T, len(tok))
+    assert h_eeg.shape == (B, S, model.bart.config.d_model)
+
+    enc = tok(["the first sentence", "a different second one here", "third"],
+              padding=True, return_tensors="pt")
+    h_text = model.encode_text(enc["input_ids"], enc["attention_mask"])
+    assert h_text.shape[0] == B and h_text.shape[2] == model.bart.config.d_model
+    assert not h_text.requires_grad, "encode_text target must be detached"
+
+    texts = ["s0", "s1", "s2"]
+    tmask = enc["attention_mask"].bool()
+    # A correct pairing (text aligned to itself) scores below a permuted one:
+    # self-similarity 1.0 sits on the diagonal where the InfoNCE target expects it.
+    aligned = contrastive_alignment_loss(h_text, tmask, h_text, tmask, texts)
+    perm = [2, 0, 1]
+    mis = contrastive_alignment_loss(h_text, tmask, h_text[perm], tmask[perm], texts)
+    assert aligned.item() < mis.item(), \
+        f"aligned {aligned.item():.4f} should be < shuffled {mis.item():.4f}"
+    print("  PASS: test_text_encoder_alignment")
+
+
 # =============================================================================
 # Integration: end-to-end with real data
 # =============================================================================
@@ -584,6 +619,7 @@ if __name__ == "__main__":
         test_model_param_groups_llrd,
         test_phase2_bart_warmup_lambda,
         test_bart_dropout_override,
+        test_text_encoder_alignment,
         # Integration
         test_end_to_end_with_real_data,
     ]

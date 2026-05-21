@@ -40,10 +40,12 @@ class EEGGraphDataset(Dataset):
         - meta: dict with text, words, subject_id, etc.
     """
 
-    def __init__(self, eeg_path, meta_path, triplets_path, tokenizer, max_src_len=128, max_tgt_len=128):
+    def __init__(self, eeg_path, meta_path, triplets_path, tokenizer,
+                 max_src_len=128, max_tgt_len=128, max_text_len=96):
         self.tokenizer = tokenizer
         self.max_src_len = max_src_len
         self.max_tgt_len = max_tgt_len
+        self.max_text_len = max_text_len
 
         self.eeg_data = np.load(eeg_path, allow_pickle=True)
 
@@ -81,6 +83,11 @@ class EEGGraphDataset(Dataset):
             eeg = eeg[:n_words]
             has_fix = np.array(m["has_fixation"][:n_words], dtype=bool)
 
+            # Gold sentence text, tokenized for the alignment teacher path —
+            # REBEL's own encoder representation of this text is the target the
+            # EEG bridge is trained to match (see EEGBartModel.encode_text).
+            text_ids = tokenizer(text, truncation=True, max_length=self.max_text_len)["input_ids"]
+
             if len(triplets) > 0:
                 n_matched += 1
 
@@ -88,8 +95,10 @@ class EEGGraphDataset(Dataset):
                 "eeg": torch.tensor(eeg, dtype=torch.float32),
                 "target_ids": torch.tensor(target_ids, dtype=torch.long),
                 "has_fixation": torch.tensor(has_fix, dtype=torch.bool),
+                "text_ids": torch.tensor(text_ids, dtype=torch.long),
                 "n_src": n_words,
                 "n_tgt": len(target_ids),
+                "n_text": len(text_ids),
                 "meta": {
                     "text": text,
                     "words": m["words"][:n_words],
@@ -140,11 +149,14 @@ def collate_fn(batch, pad_id):
         - tgt:         (B, max_tgt - 1) — decoder input (all but last token)
         - tgt_labels:  (B, max_tgt - 1) — decoder target (all but first token)
         - tgt_mask:    (B, max_tgt - 1) — True for non-pad
+        - text_ids:    (B, max_text) — gold sentence text tokens (teacher path)
+        - text_mask:   (B, max_text) — True for non-pad text tokens
         - meta:        list of dicts
     """
     B = len(batch)
     max_src = max(b["n_src"] for b in batch)
     max_tgt = max(b["n_tgt"] for b in batch)
+    max_text = max(b["n_text"] for b in batch)
     feat_dim = batch[0]["eeg"].shape[-1]
 
     src = torch.zeros(B, max_src, feat_dim)
@@ -155,10 +167,13 @@ def collate_fn(batch, pad_id):
     tgt_lbl = torch.full((B, max_tgt - 1), pad_id, dtype=torch.long)
     tgt_mask = torch.zeros(B, max_tgt - 1, dtype=torch.bool)
 
+    text_ids = torch.full((B, max_text), pad_id, dtype=torch.long)
+    text_mask = torch.zeros(B, max_text, dtype=torch.bool)
+
     metas = []
 
     for i, b in enumerate(batch):
-        ns, nt = b["n_src"], b["n_tgt"]
+        ns, nt, ntx = b["n_src"], b["n_tgt"], b["n_text"]
 
         src[i, :ns] = b["eeg"]
         src_mask[i, :ns] = True
@@ -167,6 +182,9 @@ def collate_fn(batch, pad_id):
         tgt_in[i, :nt - 1] = b["target_ids"][:-1]
         tgt_lbl[i, :nt - 1] = b["target_ids"][1:]
         tgt_mask[i, :nt - 1] = True
+
+        text_ids[i, :ntx] = b["text_ids"]
+        text_mask[i, :ntx] = True
 
         metas.append(b["meta"])
 
@@ -177,6 +195,8 @@ def collate_fn(batch, pad_id):
         "tgt": tgt_in,
         "tgt_labels": tgt_lbl,
         "tgt_mask": tgt_mask,
+        "text_ids": text_ids,
+        "text_mask": text_mask,
         "meta": metas,
     }
 
@@ -191,6 +211,7 @@ def build_dataloaders(
     batch_size=16,
     max_src_len=128,
     max_tgt_len=128,
+    max_text_len=96,
     num_workers=0,
     bart_name="Babelscape/rebel-large",
     tokenizer=None,
@@ -225,7 +246,8 @@ def build_dataloaders(
             continue
 
         print(f"\nLoading {split}:")
-        ds = EEGGraphDataset(eeg_path, meta_path, triplets_path, tokenizer, max_src_len, max_tgt_len)
+        ds = EEGGraphDataset(eeg_path, meta_path, triplets_path, tokenizer,
+                             max_src_len, max_tgt_len, max_text_len)
 
         limit = limits.get(split)
         if limit and limit < len(ds):

@@ -78,7 +78,7 @@ class EEGBartModel(nn.Module):
             in_dim = d_model
         self.bridge = nn.Sequential(*layers)
 
-    def forward(self, src, src_mask, tgt):
+    def forward(self, src, src_mask, tgt, return_encoder_states=False):
         """
         Teacher-forced forward pass.
 
@@ -86,18 +86,55 @@ class EEGBartModel(nn.Module):
             src:      (B, S, eeg_dim) — EEG features
             src_mask: (B, S) bool — True for real tokens
             tgt:      (B, T) — decoder input token IDs (shifted right)
+            return_encoder_states: also return the encoder's last hidden state
+                (the EEG-side representation aligned against encode_text).
 
         Returns:
-            logits: (B, T, vocab_size)
+            logits: (B, T, vocab_size), or (logits, encoder_states) where
+            encoder_states is (B, S, d_model) when return_encoder_states is set.
         """
         inputs_embeds = self.bridge(src)
+        attn = src_mask.long()
+        # Run the encoder explicitly so the EEG-side hidden states are available
+        # for the alignment loss without a second encoder pass; feeding the
+        # result back as `encoder_outputs` is equivalent to `inputs_embeds=`.
+        encoder_outputs = self.bart.model.encoder(
+            inputs_embeds=inputs_embeds, attention_mask=attn,
+        )
         out = self.bart(
-            inputs_embeds=inputs_embeds,
-            attention_mask=src_mask.long(),
+            encoder_outputs=encoder_outputs,
+            attention_mask=attn,
             decoder_input_ids=tgt,
             use_cache=False,
         )
+        if return_encoder_states:
+            return out.logits, encoder_outputs.last_hidden_state
         return out.logits
+
+    @torch.no_grad()
+    def encode_text(self, text_ids, text_mask):
+        """
+        Teacher path: REBEL's own encoder representation of the gold sentence
+        text. This is the alignment target for the EEG bridge — training the
+        bridge so its encoder states match these gives a direct, dense gradient
+        that does not route through the decoder (and so cannot be shortcut).
+
+        Returned states are detached (no_grad); dropout is disabled so the
+        target is deterministic even when the model is in train() mode.
+
+        Returns:
+            (B, T_text, d_model) text encoder hidden states.
+        """
+        enc = self.bart.model.encoder
+        was_training = enc.training
+        enc.eval()
+        try:
+            states = enc(
+                input_ids=text_ids, attention_mask=text_mask.long(),
+            ).last_hidden_state
+        finally:
+            enc.train(was_training)
+        return states
 
     @torch.no_grad()
     def generate(self, src, src_mask, max_len=128, num_beams=1):

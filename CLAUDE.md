@@ -14,7 +14,7 @@ For an end-to-end walkthrough of architecture, data flow, and design rationale, 
 preprocessing/      Phase A.1: raw ZuCo .mat → word-level (n_words, 840) arrays
 generateTriplets/   Phase A.2: sentence text → triplets via REBEL itself
 model/              Phase B: dataset, model, training, inference, tests
-tests/              processed_data_test.py — sanity checks for processed_zuco*/
+tests/              processed_data_test.py (split sanity checks) + eeg_signal_probe.py (REBEL-free EEG signal probe)
 processed_zuco{,1,2}/   Output of Phase A (gitignored)
 checkpoints*/       Training outputs (best_model.pt + tokenizer/ subdir)
 train_{smoke,full,overfit,overfit_frozen}.sbatch   Slurm jobs for BGU CIS cluster
@@ -88,6 +88,7 @@ These are enforced by tests in `model/test_model.py` and reflect deliberate desi
   - **Separate weight decay:** bridge uses `--weight_decay` (0.01); BART uses `--bart_weight_decay` (0.05) to regularize fine-tuning.
   - **Patience suppression:** `patience_counter` does not tick during the BART warmup window — val loss is expected to fluctuate while BART thaws.
 - **BART dropout overrides:** `--bart_dropout` and `--bart_attention_dropout` (defaults 0.2 / 0.2) raise REBEL's native 0.1 dropout to regularize fine-tuning. Passed through `BartForConditionalGeneration.from_pretrained(..., dropout=..., attention_dropout=..., activation_dropout=...)` so the config and constructed modules stay in sync.
+- **Text-encoder alignment loss:** `--align_weight` (default 1.0) adds a contrastive (InfoNCE) loss that pulls the bridge's EEG encoder states toward REBEL's own encoder states for the **gold sentence text** (`EEGBartModel.encode_text`, a frozen/detached teacher). This is the fix for the decoder-shortcut failure: cross-entropy alone gives the bridge no usable gradient — an unfrozen decoder memorizes the targets as a language model and ignores the EEG, a frozen decoder won't route signal through cross-attention. The alignment loss is a direct, dense gradient into the bridge that bypasses the decoder entirely. `train_epoch` loss = label-smoothed CE + `align_weight` × contrastive alignment; `align_weight 0` restores CE-only behaviour (and skips the teacher pass). Same-text off-diagonal pairs are masked out of the InfoNCE negatives — the same sentence read by two subjects is not a negative.
 - **Splits are grouped by sentence text**, not by subject. The same sentence read by multiple subjects must stay in one split.
 - **Tokenizer lives in `output_dir/tokenizer/`, not inside the `.pt` checkpoint.** Keep them together when copying checkpoints.
 
@@ -104,7 +105,7 @@ These are enforced by tests in `model/test_model.py` and reflect deliberate desi
 
 ## Working with the model
 
-- `EEGBartModel.forward(src, src_mask, tgt)` is teacher-forced; `src_mask` must be `.long()` for HF's attention mask (`collate_fn` already produces it fixation-aware — see Data conventions). The encoder embeddings are bypassed via `inputs_embeds=bridge(src)`.
+- `EEGBartModel.forward(src, src_mask, tgt, return_encoder_states=False)` is teacher-forced; `src_mask` must be `.long()` for HF's attention mask (`collate_fn` already produces it fixation-aware — see Data conventions). The encoder embeddings are bypassed via `inputs_embeds=bridge(src)`; the encoder is run explicitly and its output fed back as `encoder_outputs` so `return_encoder_states=True` can also hand back the EEG-side hidden states for the alignment loss (no second encoder pass). `EEGBartModel.encode_text` is the matching frozen text teacher.
 - `collate_fn` performs the teacher-forcing shift: `tgt = target_ids[:-1]`, `tgt_labels = target_ids[1:]`. Don't shift again elsewhere.
 - `model.generate(..., num_beams=1)` is greedy; `>1` activates beam search with `early_stopping=True`. Same API.
 - `train.py` selects `best_model.pt` by the tuple `(val_F1, -val_loss)` — F1 dominates, and when F1 is uninformative (stuck at 0.0 on small/hard runs) the lowest val_loss breaks the tie, so the checkpoint tracks the genuinely-best epoch instead of freezing at epoch 1. The first epoch always saves (the initial score is below any real one).
