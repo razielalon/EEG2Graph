@@ -78,6 +78,28 @@ class EEGBartModel(nn.Module):
             in_dim = d_model
         self.bridge = nn.Sequential(*layers)
 
+    def encode_eeg(self, src, src_mask):
+        """
+        Bridge → REBEL encoder. Returns (encoder_outputs, attn) so the same
+        encoder pass can feed multiple decoder targets (e.g. triplets AND the
+        sentence-reconstruction auxiliary head) without re-encoding the EEG.
+        """
+        inputs_embeds = self.bridge(src)
+        attn = src_mask.long()
+        encoder_outputs = self.bart.model.encoder(
+            inputs_embeds=inputs_embeds, attention_mask=attn,
+        )
+        return encoder_outputs, attn
+
+    def decode(self, encoder_outputs, attn, dec_input_ids):
+        """Run REBEL's decoder + lm_head against precomputed encoder states."""
+        return self.bart(
+            encoder_outputs=encoder_outputs,
+            attention_mask=attn,
+            decoder_input_ids=dec_input_ids,
+            use_cache=False,
+        ).logits
+
     def forward(self, src, src_mask, tgt, return_encoder_states=False):
         """
         Teacher-forced forward pass.
@@ -93,23 +115,14 @@ class EEGBartModel(nn.Module):
             logits: (B, T, vocab_size), or (logits, encoder_states) where
             encoder_states is (B, S, d_model) when return_encoder_states is set.
         """
-        inputs_embeds = self.bridge(src)
-        attn = src_mask.long()
         # Run the encoder explicitly so the EEG-side hidden states are available
         # for the alignment loss without a second encoder pass; feeding the
         # result back as `encoder_outputs` is equivalent to `inputs_embeds=`.
-        encoder_outputs = self.bart.model.encoder(
-            inputs_embeds=inputs_embeds, attention_mask=attn,
-        )
-        out = self.bart(
-            encoder_outputs=encoder_outputs,
-            attention_mask=attn,
-            decoder_input_ids=tgt,
-            use_cache=False,
-        )
+        encoder_outputs, attn = self.encode_eeg(src, src_mask)
+        logits = self.decode(encoder_outputs, attn, tgt)
         if return_encoder_states:
-            return out.logits, encoder_outputs.last_hidden_state
-        return out.logits
+            return logits, encoder_outputs.last_hidden_state
+        return logits
 
     @torch.no_grad()
     def encode_text(self, text_ids, text_mask):

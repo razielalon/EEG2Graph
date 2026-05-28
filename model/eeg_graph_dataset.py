@@ -151,6 +151,8 @@ def collate_fn(batch, pad_id):
         - tgt_mask:    (B, max_tgt - 1) — True for non-pad
         - text_ids:    (B, max_text) — gold sentence text tokens (teacher path)
         - text_mask:   (B, max_text) — True for non-pad text tokens
+        - text_tgt:        (B, max_text - 1) — gold-text decoder input (recon head)
+        - text_tgt_labels: (B, max_text - 1) — gold-text decoder target (recon head)
         - meta:        list of dicts
     """
     B = len(batch)
@@ -170,6 +172,11 @@ def collate_fn(batch, pad_id):
     text_ids = torch.full((B, max_text), pad_id, dtype=torch.long)
     text_mask = torch.zeros(B, max_text, dtype=torch.bool)
 
+    # Teacher-forcing shift of the gold sentence text for the reconstruction
+    # auxiliary head (same shift as the triplet target).
+    text_tgt = torch.full((B, max_text - 1), pad_id, dtype=torch.long)
+    text_tgt_lbl = torch.full((B, max_text - 1), pad_id, dtype=torch.long)
+
     metas = []
 
     for i, b in enumerate(batch):
@@ -186,6 +193,9 @@ def collate_fn(batch, pad_id):
         text_ids[i, :ntx] = b["text_ids"]
         text_mask[i, :ntx] = True
 
+        text_tgt[i, :ntx - 1] = b["text_ids"][:-1]
+        text_tgt_lbl[i, :ntx - 1] = b["text_ids"][1:]
+
         metas.append(b["meta"])
 
     return {
@@ -197,6 +207,8 @@ def collate_fn(batch, pad_id):
         "tgt_mask": tgt_mask,
         "text_ids": text_ids,
         "text_mask": text_mask,
+        "text_tgt": text_tgt,
+        "text_tgt_labels": text_tgt_lbl,
         "meta": metas,
     }
 

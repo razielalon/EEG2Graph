@@ -184,16 +184,21 @@ def _log_sample_predictions(preds, golds, n=3):
 # =============================================================================
 
 def train_epoch(model, loader, criterion, optimizer, scheduler, device,
-                grad_clip=1.0, align_weight=0.0, align_temp=0.07):
+                grad_clip=1.0, align_weight=0.0, align_temp=0.07,
+                recon_weight=0.0):
     """
-    One training epoch. Loss = label-smoothed CE + align_weight * contrastive
-    text-encoder alignment. When align_weight is 0 the teacher pass is skipped
-    entirely (original CE-only behaviour and cost).
+    One training epoch. Loss = label-smoothed CE(triplet)
+        + align_weight  * contrastive text-encoder alignment
+        + recon_weight  * label-smoothed CE(gold sentence text).
 
-    Returns a dict with the epoch-mean total / ce / align losses.
+    The reconstruction head reuses the SAME encoder pass as the triplet head
+    (one bridge+encoder forward, two decoder passes) so both decoders see
+    identical EEG memory. When a weight is 0 its extra pass is skipped.
+
+    Returns a dict with the epoch-mean total / ce / align / recon losses.
     """
     model.train()
-    tot_loss = tot_ce = tot_align = 0.0
+    tot_loss = tot_ce = tot_align = tot_recon = 0.0
     n_batches = 0
 
     for batch in loader:
@@ -202,9 +207,22 @@ def train_epoch(model, loader, criterion, optimizer, scheduler, device,
         tgt = batch["tgt"].to(device)
         tgt_labels = batch["tgt_labels"].to(device)
 
+        encoder_outputs, attn = model.encode_eeg(src, src_mask)
+        logits = model.decode(encoder_outputs, attn, tgt)
+        ce = criterion(logits, tgt_labels)
+        loss = ce
+
+        recon = None
+        if recon_weight > 0:
+            text_tgt = batch["text_tgt"].to(device)
+            text_tgt_labels = batch["text_tgt_labels"].to(device)
+            text_logits = model.decode(encoder_outputs, attn, text_tgt)
+            recon = criterion(text_logits, text_tgt_labels)
+            loss = loss + recon_weight * recon
+
+        align = None
         if align_weight > 0:
-            logits, h_eeg = model(src, src_mask, tgt, return_encoder_states=True)
-            ce = criterion(logits, tgt_labels)
+            h_eeg = encoder_outputs.last_hidden_state
             text_ids = batch["text_ids"].to(device)
             text_mask = batch["text_mask"].to(device)
             h_text = model.encode_text(text_ids, text_mask)
@@ -212,12 +230,7 @@ def train_epoch(model, loader, criterion, optimizer, scheduler, device,
             align = contrastive_alignment_loss(
                 h_eeg, src_mask, h_text, text_mask, texts, temperature=align_temp,
             )
-            loss = ce + align_weight * align
-        else:
-            logits = model(src, src_mask, tgt)
-            ce = criterion(logits, tgt_labels)
-            align = None
-            loss = ce
+            loss = loss + align_weight * align
 
         optimizer.zero_grad()
         loss.backward()
@@ -227,13 +240,15 @@ def train_epoch(model, loader, criterion, optimizer, scheduler, device,
         tot_loss += loss.item()
         tot_ce += ce.item()
         tot_align += align.item() if align is not None else 0.0
+        tot_recon += recon.item() if recon is not None else 0.0
         n_batches += 1
 
     if scheduler is not None:
         scheduler.step()
 
     n = max(n_batches, 1)
-    return {"loss": tot_loss / n, "ce": tot_ce / n, "align": tot_align / n}
+    return {"loss": tot_loss / n, "ce": tot_ce / n,
+            "align": tot_align / n, "recon": tot_recon / n}
 
 
 @torch.no_grad()
@@ -417,7 +432,7 @@ def main(args):
         train_stats = train_epoch(
             model, loaders["train"], criterion, optimizer, scheduler, device,
             grad_clip=args.grad_clip, align_weight=args.align_weight,
-            align_temp=args.align_temp,
+            align_temp=args.align_temp, recon_weight=args.recon_weight,
         )
         train_loss = train_stats["loss"]
 
@@ -454,6 +469,7 @@ def main(args):
             "train_loss": train_loss,
             "train_ce": train_stats["ce"],
             "train_align": train_stats["align"],
+            "train_recon": train_stats["recon"],
             "train_f1": train_metrics.get("f1", 0),
             "train_precision": train_metrics.get("precision", 0),
             "train_recall": train_metrics.get("recall", 0),
@@ -476,9 +492,13 @@ def main(args):
         align_str = ""
         if args.align_weight > 0:
             align_str = f"align={train_stats['align']:.4f} | "
+        recon_str = ""
+        if args.recon_weight > 0:
+            recon_str = f"recon={train_stats['recon']:.4f} | "
         print(f"  Epoch {epoch:3d}/{args.epochs} | "
               f"train_loss={train_loss:.4f} | "
               f"{align_str}"
+              f"{recon_str}"
               f"{train_f1_str}"
               f"val_loss={val_metrics.get('loss', 0):.4f} | "
               f"val_F1={val_metrics.get('f1', 0):.4f} "
@@ -666,6 +686,13 @@ if __name__ == "__main__":
                              "the decoder shortcut. 0 disables it (CE-only).")
     parser.add_argument("--align_temp", type=float, default=0.07,
                         help="InfoNCE temperature for the alignment loss.")
+    parser.add_argument("--recon_weight", type=float, default=0.0,
+                        help="Weight of the sentence-reconstruction auxiliary "
+                             "loss: label-smoothed CE for decoding the gold "
+                             "sentence text from the same EEG encoder states. "
+                             "Denser, position-aware supervision for the bridge "
+                             "than the pooled InfoNCE alignment. 0 disables it "
+                             "(and skips the extra decoder pass).")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed (python/numpy/torch + cuDNN deterministic). "
                              "Keep identical across experiment branches so config "
