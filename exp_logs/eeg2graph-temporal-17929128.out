@@ -1,0 +1,142 @@
+------------------------------------
+Thu 28 May 2026 14:35:30 IDT
+SLURM_JOBID:		17929128
+SLURM_JOB_NODELIST:	ee-l40s-01
+SLURM_SCRATCH_DIR:	/scratch/zivcz/17929128
+Allocated Resouces:	cpu - 8 / mem - 49152 MB / gpu - 5
+SLURM_GPU_INDEX:	5
+Running as zivcz from eliyanac account with eliyanac QOS
+------------------------------------
+JOBID=17929128
+NODELIST=ee-l40s-01
+START=Thu 28 May 2026 14:35:30 IDT
+Thu May 28 14:35:30 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L40S                    On  |   00000000:F4:00.0 Off |                    0 |
+| N/A   53C    P8             40W /  350W |       0MiB /  46068MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Device: cuda
+Seed: 42
+
+============================================================
+Loading data
+============================================================
+
+Loading train:
+  10216 samples, 10216 with triplets (100.0%)
+
+Loading val:
+  1313 samples, 1313 with triplets (100.0%)
+
+Loading test:
+  1246 samples, 1246 with triplets (100.0%)
+
+Tokenizer vocab size: 50272
+
+============================================================
+Building model
+============================================================
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 11877.94it/s]
+/home/zivcz/.conda/envs/eeg2graph/lib/python3.11/site-packages/torch/nn/modules/transformer.py:382: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  warnings.warn(
+  Trainable params: 446,004,224 (bridge: 1,914,880, bart: 444,089,344)
+
+  Phase 1: BART frozen for 10 warmup epochs (bridge-only)
+
+============================================================
+Training
+============================================================
+  Epoch   1/80 | train_loss=8.8773 | align=3.3673 | val_loss=5.1707 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.93e-04, bart=0.00e+00..0.00e+00] | 66.0s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1707
+  Epoch   2/80 | train_loss=8.7850 | align=3.1556 | val_loss=5.1076 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.71e-04, bart=0.00e+00..0.00e+00] | 64.8s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1076
+  Epoch   3/80 | train_loss=8.6506 | align=3.1297 | val_loss=5.2182 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.38e-04, bart=0.00e+00..0.00e+00] | 64.5s
+  Epoch   4/80 | train_loss=8.4854 | align=3.0990 | val_loss=5.1296 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.96e-04, bart=0.00e+00..0.00e+00] | 64.8s
+  Epoch   5/80 | train_loss=8.3771 | align=3.0646 | val_loss=4.9606 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.50e-04, bart=0.00e+00..0.00e+00] | 65.7s
+    New best checkpoint: val_F1=0.0000, val_loss=4.9606
+  Epoch   6/80 | train_loss=8.3336 | align=3.0625 | val_loss=4.9230 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.04e-04, bart=0.00e+00..0.00e+00] | 64.8s
+    New best checkpoint: val_F1=0.0000, val_loss=4.9230
+  Epoch   7/80 | train_loss=8.2756 | align=3.0476 | val_loss=4.8132 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=6.21e-05, bart=0.00e+00..0.00e+00] | 84.7s
+    New best checkpoint: val_F1=0.0000, val_loss=4.8132
+  Epoch   8/80 | train_loss=8.4520 | align=3.1356 | val_loss=4.8386 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.89e-05, bart=0.00e+00..0.00e+00] | 66.0s
+  Epoch   9/80 | train_loss=8.2811 | align=3.0512 | val_loss=4.8259 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.63e-06, bart=0.00e+00..0.00e+00] | 65.9s
+  Epoch  10/80 | train_loss=8.2491 | align=3.0357 | val_loss=4.8132 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=3.00e-07, bart=0.00e+00..0.00e+00] | 65.7s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('The Wasp Factory', 'founded by', 'John F. Kennedy')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('The Wasp Factory', 'founded by', 'John F. Kennedy')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('The Wasp Factory', 'founded by', 'John F. Kennedy')]
+    New best checkpoint: val_F1=0.0000, val_loss=4.8132
+
+  Phase 2: BART unfrozen (446,004,224 trainable params, 26 LLRD groups, 70 epochs, BART warmup=3 epochs, llrd_gamma=0.8)
+  Epoch  11/80 | train_loss=6.3776 | align=2.7265 | val_loss=8.0733 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=9.00e-05, bart=1.37e-06..2.00e-05] | 144.8s
+  Epoch  12/80 | train_loss=5.7117 | align=2.6629 | val_loss=6.7999 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.98e-05, bart=2.06e-06..3.00e-05] | 144.5s
+  Epoch  13/80 | train_loss=5.3315 | align=2.7369 | val_loss=3.7079 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.96e-05, bart=2.06e-06..3.00e-05] | 106.0s
+    New best checkpoint: val_F1=0.0000, val_loss=3.7079
+  Epoch  14/80 | train_loss=5.0530 | align=2.7568 | val_loss=3.7920 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.93e-05, bart=2.06e-06..3.00e-05] | 106.1s
+  Epoch  15/80 | train_loss=4.8913 | align=2.7584 | val_loss=3.8990 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.88e-05, bart=2.06e-06..2.99e-05] | 105.7s
+  Epoch  16/80 | train_loss=4.7940 | align=2.7594 | val_loss=3.9385 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.83e-05, bart=2.05e-06..2.98e-05] | 106.0s
+  Epoch  17/80 | train_loss=4.7286 | align=2.7623 | val_loss=3.9086 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.77e-05, bart=2.04e-06..2.97e-05] | 110.5s
+  Epoch  18/80 | train_loss=4.7115 | align=2.7947 | val_loss=3.9859 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.70e-05, bart=2.03e-06..2.96e-05] | 105.5s
+  Epoch  19/80 | train_loss=4.6951 | align=2.8087 | val_loss=4.0191 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.63e-05, bart=2.02e-06..2.94e-05] | 106.7s
+  Epoch  20/80 | train_loss=4.6571 | align=2.7958 | val_loss=4.0539 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.54e-05, bart=2.00e-06..2.92e-05] | 109.2s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('George David Birkhoff', 'date of birth date of death', '21 March 1884 12 November 1944')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('George David Birkhoff', 'date of birth date of death', '21 March 1884 12 November 1944')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('George David Birkhoff', 'date of birth date of death', '21 March 1884 12 November 1944')]
+  Epoch  21/80 | train_loss=4.6337 | align=2.7885 | val_loss=4.0945 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.45e-05, bart=1.99e-06..2.89e-05] | 106.6s
+  Epoch  22/80 | train_loss=4.6102 | align=2.7871 | val_loss=4.1358 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.34e-05, bart=1.97e-06..2.86e-05] | 111.7s
+  Epoch  23/80 | train_loss=4.6031 | align=2.7931 | val_loss=4.1631 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.23e-05, bart=1.95e-06..2.83e-05] | 105.6s
+  Epoch  24/80 | train_loss=4.5814 | align=2.7841 | val_loss=4.1649 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.12e-05, bart=1.92e-06..2.80e-05] | 105.6s
+  Epoch  25/80 | train_loss=4.5704 | align=2.7828 | val_loss=4.1725 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.99e-05, bart=1.90e-06..2.76e-05] | 105.3s
+  Epoch  26/80 | train_loss=4.5651 | align=2.7837 | val_loss=4.1771 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.86e-05, bart=1.87e-06..2.72e-05] | 105.8s
+  Epoch  27/80 | train_loss=4.5536 | align=2.7810 | val_loss=4.1936 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.72e-05, bart=1.84e-06..2.68e-05] | 106.3s
+  Epoch  28/80 | train_loss=4.5442 | align=2.7793 | val_loss=4.2044 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.57e-05, bart=1.81e-06..2.63e-05] | 105.6s
+  Epoch  29/80 | train_loss=4.5432 | align=2.7840 | val_loss=4.2437 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.42e-05, bart=1.78e-06..2.59e-05] | 130.5s
+  Epoch  30/80 | train_loss=4.5314 | align=2.7776 | val_loss=4.2324 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.26e-05, bart=1.74e-06..2.54e-05] | 113.3s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (2): [('Roman Catholic', 'has part', '20th century'), ('20th century', 'part of', 'Roman Catholic')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (2): [('Roman Catholic', 'has part', '20th century'), ('20th century', 'part of', 'Roman Catholic')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (2): [('Roman Catholic', 'has part', '20th century'), ('20th century', 'part of', 'Roman Catholic')]
+  Epoch  31/80 | train_loss=4.5304 | align=2.7811 | val_loss=4.2315 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.10e-05, bart=1.71e-06..2.48e-05] | 128.7s
+  Epoch  32/80 | train_loss=4.5255 | align=2.7812 | val_loss=4.2677 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=6.93e-05, bart=1.67e-06..2.43e-05] | 105.9s
+  Epoch  33/80 | train_loss=4.5223 | align=2.7808 | val_loss=4.2566 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=6.75e-05, bart=1.63e-06..2.37e-05] | 107.9s
+
+  Early stopping at epoch 33 (no val loss improvement for 20 epochs)
+
+============================================================
+Test Evaluation (beam search)
+============================================================
+  Test F1:        0.0000
+  Test Precision: 0.0000
+  Test Recall:    0.0000
+  Predicted:      2492 triplets
+  Gold:           1936 triplets
+  Correct:        0 triplets
+
+Done!
+END=Thu 28 May 2026 15:31:58 IDT

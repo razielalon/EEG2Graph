@@ -1,0 +1,138 @@
+------------------------------------
+Thu 28 May 2026 14:27:12 IDT
+SLURM_JOBID:		17929072
+SLURM_JOB_NODELIST:	ee-l40s-01
+SLURM_SCRATCH_DIR:	/scratch/zivcz/17929072
+Allocated Resouces:	cpu - 8 / mem - 49152 MB / gpu - 7
+SLURM_GPU_INDEX:	7
+Running as zivcz from eliyanac account with eliyanac QOS
+------------------------------------
+JOBID=17929072
+NODELIST=ee-l40s-01
+START=Thu 28 May 2026 14:27:12 IDT
+Thu May 28 14:27:12 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L40S                    On  |   00000000:84:00.0 Off |                    0 |
+| N/A   26C    P8             32W /  350W |       0MiB /  46068MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Device: cuda
+Seed: 42
+
+============================================================
+Loading data
+============================================================
+
+Loading train:
+  10216 samples, 10216 with triplets (100.0%)
+
+Loading val:
+  1313 samples, 1313 with triplets (100.0%)
+
+Loading test:
+  1246 samples, 1246 with triplets (100.0%)
+
+Tokenizer vocab size: 50272
+
+============================================================
+Building model
+============================================================
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 7331.12it/s]
+  Trainable params: 408,213,504 (bridge: 1,914,880, bart: 406,298,624)
+
+  Phase 1: BART frozen for 10 warmup epochs (bridge-only)
+
+============================================================
+Training
+============================================================
+  Epoch   1/80 | train_loss=14.0965 | align=3.8558 | recon=9.3568 | val_loss=5.2733 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.93e-04, bart=0.00e+00..0.00e+00] | 97.7s
+    New best checkpoint: val_F1=0.0000, val_loss=5.2733
+  Epoch   2/80 | train_loss=13.6003 | align=3.3316 | recon=9.3686 | val_loss=5.1520 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.71e-04, bart=0.00e+00..0.00e+00] | 91.5s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1520
+  Epoch   3/80 | train_loss=13.2879 | align=3.2857 | recon=9.1400 | val_loss=5.1129 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.38e-04, bart=0.00e+00..0.00e+00] | 91.2s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1129
+  Epoch   4/80 | train_loss=13.2913 | align=3.1706 | recon=9.2912 | val_loss=5.1817 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.96e-04, bart=0.00e+00..0.00e+00] | 92.6s
+  Epoch   5/80 | train_loss=13.3552 | align=3.1922 | recon=9.3410 | val_loss=5.1444 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.50e-04, bart=0.00e+00..0.00e+00] | 90.8s
+  Epoch   6/80 | train_loss=13.3070 | align=3.1590 | recon=9.3237 | val_loss=5.0957 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.04e-04, bart=0.00e+00..0.00e+00] | 90.9s
+    New best checkpoint: val_F1=0.0000, val_loss=5.0957
+  Epoch   7/80 | train_loss=13.2682 | align=3.1455 | recon=9.3086 | val_loss=5.1099 | val_F1=0.0013 (P=0.001 R=0.001) | lr=[bridge=6.21e-05, bart=0.00e+00..0.00e+00] | 95.8s
+    New best checkpoint: val_F1=0.0013, val_loss=5.1099
+  Epoch   8/80 | train_loss=13.2565 | align=3.1475 | recon=9.2836 | val_loss=5.1234 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.89e-05, bart=0.00e+00..0.00e+00] | 93.7s
+  Epoch   9/80 | train_loss=13.2453 | align=3.1476 | recon=9.2780 | val_loss=5.1092 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.63e-06, bart=0.00e+00..0.00e+00] | 93.6s
+  Epoch  10/80 | train_loss=13.2267 | align=3.1468 | recon=9.2614 | val_loss=5.1094 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=3.00e-07, bart=0.00e+00..0.00e+00] | 92.9s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('The Flying Machine', 'cast member', 'John Wayne')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('The Flying Machine', 'cast member', 'John Wayne')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('The Flying Machine', 'cast member', 'John Wayne')]
+
+  Phase 2: BART unfrozen (408,213,504 trainable params, 26 LLRD groups, 70 epochs, BART warmup=3 epochs, llrd_gamma=0.8)
+  Epoch  11/80 | train_loss=9.5273 | align=2.8268 | recon=5.9472 | val_loss=5.3204 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=9.00e-05, bart=1.37e-06..2.00e-05] | 179.5s
+  Epoch  12/80 | train_loss=8.3668 | align=2.6898 | recon=5.0931 | val_loss=6.7187 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.98e-05, bart=2.06e-06..3.00e-05] | 181.1s
+  Epoch  13/80 | train_loss=7.6336 | align=2.7329 | recon=4.4332 | val_loss=3.5723 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.96e-05, bart=2.06e-06..3.00e-05] | 135.7s
+  Epoch  14/80 | train_loss=7.0286 | align=2.7549 | recon=3.8008 | val_loss=3.7526 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.93e-05, bart=2.06e-06..3.00e-05] | 136.1s
+  Epoch  15/80 | train_loss=6.5965 | align=2.7399 | recon=3.2971 | val_loss=3.8218 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.88e-05, bart=2.06e-06..2.99e-05] | 138.9s
+  Epoch  16/80 | train_loss=6.2953 | align=2.7379 | recon=2.9049 | val_loss=3.8261 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.83e-05, bart=2.05e-06..2.98e-05] | 136.6s
+  Epoch  17/80 | train_loss=6.0714 | align=2.7298 | recon=2.6212 | val_loss=3.9068 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.77e-05, bart=2.04e-06..2.97e-05] | 136.1s
+  Epoch  18/80 | train_loss=5.9076 | align=2.7093 | recon=2.4300 | val_loss=3.9105 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.70e-05, bart=2.03e-06..2.96e-05] | 135.5s
+  Epoch  19/80 | train_loss=5.8596 | align=2.7661 | recon=2.2980 | val_loss=3.9250 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.63e-05, bart=2.02e-06..2.94e-05] | 137.0s
+  Epoch  20/80 | train_loss=5.8075 | align=2.7968 | recon=2.1959 | val_loss=3.9831 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.54e-05, bart=2.00e-06..2.92e-05] | 136.2s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('George W. Bush', 'conflict', 'French and Indian Wars')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('George W. Bush', 'conflict', 'French and Indian Wars')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('George W. Bush', 'conflict', 'French and Indian Wars')]
+  Epoch  21/80 | train_loss=5.7510 | align=2.7985 | recon=2.1242 | val_loss=3.9765 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.45e-05, bart=1.99e-06..2.89e-05] | 141.2s
+  Epoch  22/80 | train_loss=5.6992 | align=2.7947 | recon=2.0709 | val_loss=4.0032 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.34e-05, bart=1.97e-06..2.86e-05] | 145.1s
+  Epoch  23/80 | train_loss=5.6501 | align=2.7889 | recon=2.0229 | val_loss=4.0223 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.23e-05, bart=1.95e-06..2.83e-05] | 158.9s
+  Epoch  24/80 | train_loss=5.6098 | align=2.7834 | recon=1.9869 | val_loss=4.0304 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.12e-05, bart=1.92e-06..2.80e-05] | 166.8s
+  Epoch  25/80 | train_loss=5.5788 | align=2.7800 | recon=1.9581 | val_loss=4.0509 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.99e-05, bart=1.90e-06..2.76e-05] | 162.4s
+  Epoch  26/80 | train_loss=5.5511 | align=2.7732 | recon=1.9362 | val_loss=4.0765 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.86e-05, bart=1.87e-06..2.72e-05] | 165.5s
+  Epoch  27/80 | train_loss=5.5239 | align=2.7690 | recon=1.9124 | val_loss=4.1316 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.72e-05, bart=1.84e-06..2.68e-05] | 166.7s
+  Epoch  28/80 | train_loss=5.5234 | align=2.7720 | recon=1.9056 | val_loss=4.0243 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.57e-05, bart=1.81e-06..2.63e-05] | 142.8s
+  Epoch  29/80 | train_loss=5.4752 | align=2.7200 | recon=1.9011 | val_loss=4.0778 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.42e-05, bart=1.78e-06..2.59e-05] | 158.8s
+  Epoch  30/80 | train_loss=5.4814 | align=2.7494 | recon=1.8794 | val_loss=4.0907 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.26e-05, bart=1.74e-06..2.54e-05] | 143.2s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (2): [('George W. Bush', 'significant event', 'his marriage initiative program'), ('his marriage initiative program', 'participant', 'George W. Bush')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('George W. Bush', 'position held', 'President')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (2): [('George W. Bush', 'significant event', 'his marriage initiative program'), ('his marriage initiative program', 'participant', 'George W. Bush')]
+  Epoch  31/80 | train_loss=5.4752 | align=2.7749 | recon=1.8570 | val_loss=4.1437 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.10e-05, bart=1.71e-06..2.48e-05] | 142.6s
+  Epoch  32/80 | train_loss=5.4465 | align=2.7593 | recon=1.8442 | val_loss=4.1657 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=6.93e-05, bart=1.67e-06..2.43e-05] | 166.8s
+  Epoch  33/80 | train_loss=5.4390 | align=2.7623 | recon=1.8362 | val_loss=4.2033 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=6.75e-05, bart=1.63e-06..2.37e-05] | 166.3s
+
+  Early stopping at epoch 33 (no val loss improvement for 20 epochs)
+
+============================================================
+Test Evaluation (beam search)
+============================================================
+  Test F1:        0.0000
+  Test Precision: 0.0000
+  Test Recall:    0.0000
+  Predicted:      1634 triplets
+  Gold:           1936 triplets
+  Correct:        0 triplets
+
+Done!
+END=Thu 28 May 2026 15:42:22 IDT
