@@ -25,11 +25,11 @@ nvidia-smi
 module load anaconda
 source activate eeg2graph
 
-cd "$HOME/EEG2Graph/model"
+cd "$HOME/exp_baseline/EEG2Graph/model"
 
 python train.py \
-    --processed_dir ../processed_zuco2 \
-    --triplets_path ../processed_zuco2/sentence_triplets.json \
+    --processed_dir $HOME/exp_baseline/EEG2Graph/processed_zuco2 \
+    --triplets_path $HOME/exp_baseline/EEG2Graph/processed_zuco2/sentence_triplets.json \
     --output_dir ../checkpoints_baseline \
     --seed 42 \
     --epochs 80 \
