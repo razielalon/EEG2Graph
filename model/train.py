@@ -201,9 +201,13 @@ def train_epoch(model, loader, criterion, optimizer, scheduler, device,
         src_mask = batch["src_mask"].to(device)
         tgt = batch["tgt"].to(device)
         tgt_labels = batch["tgt_labels"].to(device)
+        subject_idx = batch.get("subject_idx")
+        if subject_idx is not None:
+            subject_idx = subject_idx.to(device)
 
         if align_weight > 0:
-            logits, h_eeg = model(src, src_mask, tgt, return_encoder_states=True)
+            logits, h_eeg = model(src, src_mask, tgt, subject_idx=subject_idx,
+                                  return_encoder_states=True)
             ce = criterion(logits, tgt_labels)
             text_ids = batch["text_ids"].to(device)
             text_mask = batch["text_mask"].to(device)
@@ -214,7 +218,7 @@ def train_epoch(model, loader, criterion, optimizer, scheduler, device,
             )
             loss = ce + align_weight * align
         else:
-            logits = model(src, src_mask, tgt)
+            logits = model(src, src_mask, tgt, subject_idx=subject_idx)
             ce = criterion(logits, tgt_labels)
             align = None
             loss = ce
@@ -252,13 +256,17 @@ def evaluate(model, loader, criterion, tokenizer, device, max_gen_len=128, num_b
         tgt = batch["tgt"].to(device)
         tgt_labels = batch["tgt_labels"].to(device)
         metas = batch["meta"]
+        subject_idx = batch.get("subject_idx")
+        if subject_idx is not None:
+            subject_idx = subject_idx.to(device)
 
-        logits = model(src, src_mask, tgt)
+        logits = model(src, src_mask, tgt, subject_idx=subject_idx)
         loss = criterion(logits, tgt_labels)
         total_loss += loss.item()
         n_batches += 1
 
-        gen = model.generate(src, src_mask, max_len=max_gen_len, num_beams=num_beams)
+        gen = model.generate(src, src_mask, max_len=max_gen_len, num_beams=num_beams,
+                             subject_idx=subject_idx)
         for i in range(gen.size(0)):
             tokens = gen[i].cpu().tolist()
             pred = delinearize(tokens, tokenizer)
@@ -303,6 +311,7 @@ def main(args):
         num_workers=args.num_workers,
         bart_name=args.bart_name,
         limits=limits,
+        n_subject_buckets=args.n_subject_buckets,
     )
 
     tokenizer_dir = os.path.join(args.output_dir, "tokenizer")
@@ -322,6 +331,7 @@ def main(args):
         bridge_layers=args.bridge_layers,
         bart_dropout=args.bart_dropout,
         bart_attention_dropout=args.bart_attention_dropout,
+        n_subject_buckets=args.n_subject_buckets,
     ).to(device)
 
     if args.freeze_bart:
@@ -650,6 +660,11 @@ if __name__ == "__main__":
                              "--weight_decay, which only applies to the bridge).")
     parser.add_argument("--bridge_layers", type=int, default=2,
                         help="Number of bridge projection layers (1=linear, 2+=MLP with GELU)")
+    parser.add_argument("--n_subject_buckets", type=int, default=0,
+                        help="If >0, add a learned per-subject embedding (subject_id "
+                             "hashed into this many buckets) to every bridge output, "
+                             "to factor out inter-subject EEG variability. 0 disables "
+                             "it (baseline). Set above the subject count (e.g. 64).")
     parser.add_argument("--patience", type=int, default=20,
                         help="Early stopping patience on val loss (0=disabled). "
                              "Suppressed during the BART warmup window.")
