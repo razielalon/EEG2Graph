@@ -322,6 +322,8 @@ def main(args):
         bridge_layers=args.bridge_layers,
         bart_dropout=args.bart_dropout,
         bart_attention_dropout=args.bart_attention_dropout,
+        bridge_transformer_layers=args.bridge_transformer_layers,
+        bridge_nhead=args.bridge_nhead,
     ).to(device)
 
     if args.freeze_bart:
@@ -650,6 +652,14 @@ if __name__ == "__main__":
                              "--weight_decay, which only applies to the bridge).")
     parser.add_argument("--bridge_layers", type=int, default=2,
                         help="Number of bridge projection layers (1=linear, 2+=MLP with GELU)")
+    parser.add_argument("--bridge_transformer_layers", type=int, default=0,
+                        help="If >0, add a Transformer encoder of this many layers after "
+                             "the bridge projection (before REBEL's encoder) to mix EEG "
+                             "information across word positions. 0 disables it (baseline, "
+                             "pointwise bridge).")
+    parser.add_argument("--bridge_nhead", type=int, default=8,
+                        help="Attention heads for the bridge Transformer (must divide "
+                             "d_model=1024). Only used when --bridge_transformer_layers>0.")
     parser.add_argument("--patience", type=int, default=20,
                         help="Early stopping patience on val loss (0=disabled). "
                              "Suppressed during the BART warmup window.")

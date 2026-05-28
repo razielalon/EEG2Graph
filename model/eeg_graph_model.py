@@ -49,7 +49,8 @@ class EEGBartModel(nn.Module):
     """
 
     def __init__(self, tokenizer, eeg_dim=840, bart_name="Babelscape/rebel-large", dropout=0.3,
-                 bridge_layers=1, bart_dropout=None, bart_attention_dropout=None):
+                 bridge_layers=1, bart_dropout=None, bart_attention_dropout=None,
+                 bridge_transformer_layers=0, bridge_nhead=8):
         super().__init__()
         self.bart_name = bart_name
         self.pad_token_id = tokenizer.pad_token_id
@@ -78,6 +79,36 @@ class EEGBartModel(nn.Module):
             in_dim = d_model
         self.bridge = nn.Sequential(*layers)
 
+        # Optional temporal pre-encoder: a small Transformer that mixes
+        # information ACROSS word positions in EEG space before REBEL's encoder
+        # sees it. The base bridge is pointwise (each word projected
+        # independently); this lets the bridge exploit inter-word EEG structure
+        # (saccade prep, working-memory ramps) that a per-word projection can't.
+        self.bridge_transformer = None
+        self.bridge_post_ln = None
+        if bridge_transformer_layers and bridge_transformer_layers > 0:
+            enc_layer = nn.TransformerEncoderLayer(
+                d_model=d_model, nhead=bridge_nhead,
+                dim_feedforward=d_model * 4, dropout=dropout,
+                activation="gelu", batch_first=True, norm_first=True,
+            )
+            self.bridge_transformer = nn.TransformerEncoder(
+                enc_layer, num_layers=bridge_transformer_layers,
+            )
+            self.bridge_post_ln = nn.LayerNorm(d_model)
+
+    def _bridge_forward(self, src, src_mask):
+        """Bridge projection + optional temporal Transformer over word positions."""
+        out = self.bridge(src)
+        if self.bridge_transformer is not None:
+            # src_key_padding_mask: True = position to IGNORE. src_mask is
+            # True = real/fixated, so invert it. (fixation_attention_mask
+            # guarantees no row is all-False, so no row attends to nothing.)
+            pad_mask = ~src_mask.bool()
+            out = self.bridge_transformer(out, src_key_padding_mask=pad_mask)
+            out = self.bridge_post_ln(out)
+        return out
+
     def forward(self, src, src_mask, tgt, return_encoder_states=False):
         """
         Teacher-forced forward pass.
@@ -93,7 +124,7 @@ class EEGBartModel(nn.Module):
             logits: (B, T, vocab_size), or (logits, encoder_states) where
             encoder_states is (B, S, d_model) when return_encoder_states is set.
         """
-        inputs_embeds = self.bridge(src)
+        inputs_embeds = self._bridge_forward(src, src_mask)
         attn = src_mask.long()
         # Run the encoder explicitly so the EEG-side hidden states are available
         # for the alignment loss without a second encoder pass; feeding the
@@ -144,7 +175,7 @@ class EEGBartModel(nn.Module):
         Returns:
             generated: (B, gen_len) token ID tensor
         """
-        inputs_embeds = self.bridge(src)
+        inputs_embeds = self._bridge_forward(src, src_mask)
         return self.bart.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=src_mask.long(),
@@ -170,9 +201,13 @@ class EEGBartModel(nn.Module):
         BART params that are frozen (requires_grad=False) are skipped —
         otherwise AdamW would still allocate optimizer state for them.
         """
+        bridge_params = list(self.bridge.parameters())
+        if self.bridge_transformer is not None:
+            bridge_params += list(self.bridge_transformer.parameters())
+            bridge_params += list(self.bridge_post_ln.parameters())
         groups = [{
             "name": "bridge",
-            "params": list(self.bridge.parameters()),
+            "params": bridge_params,
             "lr": bridge_lr, "weight_decay": weight_decay,
         }]
         trainable_bart = [p for p in self.bart.parameters() if p.requires_grad]
@@ -204,6 +239,9 @@ class EEGBartModel(nn.Module):
         groups = []
 
         bridge_params = [p for p in self.bridge.parameters() if p.requires_grad]
+        if self.bridge_transformer is not None:
+            bridge_params += [p for p in self.bridge_transformer.parameters() if p.requires_grad]
+            bridge_params += [p for p in self.bridge_post_ln.parameters() if p.requires_grad]
         if bridge_params:
             groups.append({
                 "name": "bridge",
