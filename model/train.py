@@ -21,14 +21,31 @@ Usage:
 import os
 import json
 import math
+import random
 import argparse
 import time
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR, LambdaLR
+
+
+def set_seed(seed):
+    """Make a run reproducible across python / numpy / torch + cuDNN.
+
+    Identical seeds across the experiment branches make config deltas the only
+    source of variation, so a change in val/test F1 is attributable to the
+    change under test rather than to init/shuffle noise.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 from vocabulary import delinearize, save_tokenizer, STRUCT_TOKENS
 from eeg_graph_dataset import build_dataloaders
@@ -260,8 +277,10 @@ def evaluate(model, loader, criterion, tokenizer, device, max_gen_len=128, num_b
 # =============================================================================
 
 def main(args):
+    set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
+    print(f"Seed: {args.seed}")
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -647,6 +666,10 @@ if __name__ == "__main__":
                              "the decoder shortcut. 0 disables it (CE-only).")
     parser.add_argument("--align_temp", type=float, default=0.07,
                         help="InfoNCE temperature for the alignment loss.")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed (python/numpy/torch + cuDNN deterministic). "
+                             "Keep identical across experiment branches so config "
+                             "deltas are the only source of variation.")
     parser.add_argument("--save_every", type=int, default=10)
     parser.add_argument("--eval_train", action="store_true",
                         help="Each epoch, also run generation-based triplet F1 on the "
