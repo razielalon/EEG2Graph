@@ -114,6 +114,37 @@ def contrastive_alignment_loss(h_eeg, eeg_mask, h_text, text_mask, texts,
 
 
 # =============================================================================
+# Decoder-input token noise
+# =============================================================================
+
+def decoder_token_noise(tgt, prob, mask_token_id, protect_ids):
+    """
+    Randomly replace decoder-input tokens with the BART <mask> token, leaving
+    the labels (tgt_labels) untouched. The decoder then sees `<mask>` in place
+    of the true previous token and must use cross-attention to fill it in —
+    which forces the EEG-side encoder representation into the loss path
+    instead of the pure-LM teacher-forcing shortcut.
+
+    `protect_ids` are token IDs that must never be corrupted: <pad>, <s>, </s>,
+    and the structural <triplet>/<subj>/<obj> markers. Corrupting structural
+    tokens would change the parseable triplet grammar; corrupting pads would
+    leak into masked-out positions.
+
+    Returns a NEW tensor (does not mutate `tgt`).
+    """
+    if prob <= 0.0:
+        return tgt
+    rand = torch.rand(tgt.shape, device=tgt.device)
+    can_corrupt = torch.ones_like(tgt, dtype=torch.bool)
+    for tid in protect_ids:
+        can_corrupt = can_corrupt & (tgt != tid)
+    corrupt = (rand < prob) & can_corrupt
+    return torch.where(
+        corrupt, torch.full_like(tgt, mask_token_id), tgt,
+    )
+
+
+# =============================================================================
 # Evaluation Metrics
 # =============================================================================
 
@@ -167,11 +198,17 @@ def _log_sample_predictions(preds, golds, n=3):
 # =============================================================================
 
 def train_epoch(model, loader, criterion, optimizer, scheduler, device,
-                grad_clip=1.0, align_weight=0.0, align_temp=0.07):
+                grad_clip=1.0, align_weight=0.0, align_temp=0.07,
+                decoder_noise_prob=0.0, mask_token_id=None, protect_ids=()):
     """
     One training epoch. Loss = label-smoothed CE + align_weight * contrastive
     text-encoder alignment. When align_weight is 0 the teacher pass is skipped
     entirely (original CE-only behaviour and cost).
+
+    If `decoder_noise_prob > 0`, content tokens in the decoder input are
+    randomly replaced with `mask_token_id`; labels stay unchanged. This breaks
+    pure teacher forcing and forces the decoder to use cross-attention (and
+    therefore the EEG-side encoder representation) at every corrupted step.
 
     Returns a dict with the epoch-mean total / ce / align losses.
     """
@@ -184,6 +221,9 @@ def train_epoch(model, loader, criterion, optimizer, scheduler, device,
         src_mask = batch["src_mask"].to(device)
         tgt = batch["tgt"].to(device)
         tgt_labels = batch["tgt_labels"].to(device)
+
+        if decoder_noise_prob > 0 and mask_token_id is not None:
+            tgt = decoder_token_noise(tgt, decoder_noise_prob, mask_token_id, protect_ids)
 
         if align_weight > 0:
             logits, h_eeg = model(src, src_mask, tgt, return_encoder_states=True)
@@ -334,6 +374,22 @@ def main(args):
         smoothing=args.label_smoothing,
     )
 
+    # Decoder-input token noise: which IDs must NEVER be corrupted.
+    mask_token_id = tokenizer.mask_token_id
+    protect_ids = [
+        tokenizer.pad_token_id,
+        tokenizer.bos_token_id,
+        tokenizer.eos_token_id,
+    ]
+    for sym in STRUCT_TOKENS:
+        sid = tokenizer.convert_tokens_to_ids(sym)
+        if sid is not None and sid != tokenizer.unk_token_id:
+            protect_ids.append(sid)
+    protect_ids = tuple(t for t in protect_ids if t is not None)
+    if args.decoder_noise_prob > 0:
+        print(f"\n  Decoder-input token noise: p={args.decoder_noise_prob}, "
+              f"mask_id={mask_token_id}, protected={protect_ids}")
+
     # ---- Training ----
     print("\n" + "=" * 60)
     print("Training")
@@ -399,6 +455,8 @@ def main(args):
             model, loaders["train"], criterion, optimizer, scheduler, device,
             grad_clip=args.grad_clip, align_weight=args.align_weight,
             align_temp=args.align_temp,
+            decoder_noise_prob=args.decoder_noise_prob,
+            mask_token_id=mask_token_id, protect_ids=protect_ids,
         )
         train_loss = train_stats["loss"]
 
@@ -647,6 +705,12 @@ if __name__ == "__main__":
                              "the decoder shortcut. 0 disables it (CE-only).")
     parser.add_argument("--align_temp", type=float, default=0.07,
                         help="InfoNCE temperature for the alignment loss.")
+    parser.add_argument("--decoder_noise_prob", type=float, default=0.0,
+                        help="Probability of replacing each non-structural decoder-input "
+                             "token with <mask> during training (labels untouched). "
+                             "Breaks pure teacher forcing and forces the decoder to "
+                             "use cross-attention (and thus the EEG signal) at the "
+                             "corrupted steps. 0 disables it (baseline). 0.15–0.30 typical.")
     parser.add_argument("--save_every", type=int, default=10)
     parser.add_argument("--eval_train", action="store_true",
                         help="Each epoch, also run generation-based triplet F1 on the "
