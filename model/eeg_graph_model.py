@@ -49,7 +49,8 @@ class EEGBartModel(nn.Module):
     """
 
     def __init__(self, tokenizer, eeg_dim=840, bart_name="Babelscape/rebel-large", dropout=0.3,
-                 bridge_layers=1, bart_dropout=None, bart_attention_dropout=None):
+                 bridge_layers=1, bart_dropout=None, bart_attention_dropout=None,
+                 n_subject_buckets=0):
         super().__init__()
         self.bart_name = bart_name
         self.pad_token_id = tokenizer.pad_token_id
@@ -78,7 +79,23 @@ class EEGBartModel(nn.Module):
             in_dim = d_model
         self.bridge = nn.Sequential(*layers)
 
-    def forward(self, src, src_mask, tgt, return_encoder_states=False):
+        # Per-subject embedding added to every bridge output position, to factor
+        # out inter-subject EEG variability (Probe 2 = 0.246 subject decodability)
+        # so REBEL sees cleaner content. Zero-initialized so the run starts
+        # identical to baseline and the model learns per-subject offsets.
+        self.subject_emb = None
+        if n_subject_buckets and n_subject_buckets > 0:
+            self.subject_emb = nn.Embedding(n_subject_buckets, d_model)
+            nn.init.zeros_(self.subject_emb.weight)
+
+    def _apply_bridge(self, src, subject_idx=None):
+        """Bridge projection + optional per-subject offset."""
+        out = self.bridge(src)
+        if self.subject_emb is not None and subject_idx is not None:
+            out = out + self.subject_emb(subject_idx).unsqueeze(1)
+        return out
+
+    def forward(self, src, src_mask, tgt, subject_idx=None, return_encoder_states=False):
         """
         Teacher-forced forward pass.
 
@@ -93,7 +110,7 @@ class EEGBartModel(nn.Module):
             logits: (B, T, vocab_size), or (logits, encoder_states) where
             encoder_states is (B, S, d_model) when return_encoder_states is set.
         """
-        inputs_embeds = self.bridge(src)
+        inputs_embeds = self._apply_bridge(src, subject_idx)
         attn = src_mask.long()
         # Run the encoder explicitly so the EEG-side hidden states are available
         # for the alignment loss without a second encoder pass; feeding the
@@ -137,14 +154,14 @@ class EEGBartModel(nn.Module):
         return states
 
     @torch.no_grad()
-    def generate(self, src, src_mask, max_len=128, num_beams=1):
+    def generate(self, src, src_mask, max_len=128, num_beams=1, subject_idx=None):
         """
         Autoregressive decoding via BART. num_beams=1 = greedy, >1 = beam.
 
         Returns:
             generated: (B, gen_len) token ID tensor
         """
-        inputs_embeds = self.bridge(src)
+        inputs_embeds = self._apply_bridge(src, subject_idx)
         return self.bart.generate(
             inputs_embeds=inputs_embeds,
             attention_mask=src_mask.long(),
@@ -170,9 +187,12 @@ class EEGBartModel(nn.Module):
         BART params that are frozen (requires_grad=False) are skipped —
         otherwise AdamW would still allocate optimizer state for them.
         """
+        bridge_params = list(self.bridge.parameters())
+        if self.subject_emb is not None:
+            bridge_params += list(self.subject_emb.parameters())
         groups = [{
             "name": "bridge",
-            "params": list(self.bridge.parameters()),
+            "params": bridge_params,
             "lr": bridge_lr, "weight_decay": weight_decay,
         }]
         trainable_bart = [p for p in self.bart.parameters() if p.requires_grad]
@@ -204,6 +224,8 @@ class EEGBartModel(nn.Module):
         groups = []
 
         bridge_params = [p for p in self.bridge.parameters() if p.requires_grad]
+        if self.subject_emb is not None:
+            bridge_params += [p for p in self.subject_emb.parameters() if p.requires_grad]
         if bridge_params:
             groups.append({
                 "name": "bridge",

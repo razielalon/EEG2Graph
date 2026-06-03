@@ -20,11 +20,26 @@ Expected triplets format (JSON):
 
 import os
 import json
+import hashlib
 from functools import partial
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
+
+
+def subject_bucket(subject_id, n_buckets):
+    """
+    Map a subject_id string to a stable embedding-table index.
+
+    Uses md5 (not Python's salted hash()) so the bucket is identical across
+    runs/processes — required for the per-subject embedding to mean the same
+    thing every epoch and at inference time. n_buckets only needs to exceed the
+    subject count (18 for ZuCo 2.0, 12 for 1.0) with headroom; collisions are
+    rare and harmless for the experiment.
+    """
+    h = int(hashlib.md5(str(subject_id).encode()).hexdigest(), 16)
+    return h % n_buckets
 
 from vocabulary import build_tokenizer, linearize_triplets
 
@@ -138,7 +153,7 @@ def fixation_attention_mask(real_mask, fixation_mask):
     return attn
 
 
-def collate_fn(batch, pad_id):
+def collate_fn(batch, pad_id, n_subject_buckets=0):
     """
     Pads EEG (encoder) and target (decoder) sequences.
 
@@ -151,6 +166,8 @@ def collate_fn(batch, pad_id):
         - tgt_mask:    (B, max_tgt - 1) — True for non-pad
         - text_ids:    (B, max_text) — gold sentence text tokens (teacher path)
         - text_mask:   (B, max_text) — True for non-pad text tokens
+        - subject_idx: (B,) long — per-subject embedding index, or None when
+                       n_subject_buckets == 0
         - meta:        list of dicts
     """
     B = len(batch)
@@ -188,6 +205,13 @@ def collate_fn(batch, pad_id):
 
         metas.append(b["meta"])
 
+    subject_idx = None
+    if n_subject_buckets > 0:
+        subject_idx = torch.tensor(
+            [subject_bucket(b["meta"]["subject_id"], n_subject_buckets) for b in batch],
+            dtype=torch.long,
+        )
+
     return {
         "src": src,
         "src_mask": fixation_attention_mask(src_mask, src_fix),
@@ -197,6 +221,7 @@ def collate_fn(batch, pad_id):
         "tgt_mask": tgt_mask,
         "text_ids": text_ids,
         "text_mask": text_mask,
+        "subject_idx": subject_idx,
         "meta": metas,
     }
 
@@ -216,6 +241,7 @@ def build_dataloaders(
     bart_name="Babelscape/rebel-large",
     tokenizer=None,
     limits=None,
+    n_subject_buckets=0,
 ):
     """
     Build train/val/test dataloaders and a tokenizer.
@@ -234,7 +260,8 @@ def build_dataloaders(
     if tokenizer is None:
         tokenizer = build_tokenizer(bart_name)
 
-    collate = partial(collate_fn, pad_id=tokenizer.pad_token_id)
+    collate = partial(collate_fn, pad_id=tokenizer.pad_token_id,
+                      n_subject_buckets=n_subject_buckets)
     limits = limits or {}
 
     loaders = {}
