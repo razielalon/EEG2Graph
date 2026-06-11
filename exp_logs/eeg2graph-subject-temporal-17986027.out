@@ -1,0 +1,180 @@
+------------------------------------
+Wed 03 Jun 2026 19:47:30 IDT
+SLURM_JOBID:		17986027
+SLURM_JOB_NODELIST:	ee-l40s-01
+SLURM_SCRATCH_DIR:	/scratch/zivcz/17986027
+Allocated Resouces:	cpu - 8 / mem - 49152 MB / gpu - 7
+SLURM_GPU_INDEX:	7
+Running as zivcz from eliyanac account with eliyanac QOS
+------------------------------------
+JOBID=17986027
+NODELIST=ee-l40s-01
+START=Wed 03 Jun 2026 19:47:30 IDT
+Wed Jun  3 19:47:30 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L40S                    On  |   00000000:F4:00.0 Off |                    0 |
+| N/A   26C    P8             32W /  350W |       0MiB /  46068MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Device: cuda
+Seed: 42
+
+============================================================
+Loading data
+============================================================
+
+Loading train:
+  10216 samples, 10216 with triplets (100.0%)
+
+Loading val:
+  1313 samples, 1313 with triplets (100.0%)
+
+Loading test:
+  1246 samples, 1246 with triplets (100.0%)
+
+Tokenizer vocab size: 50272
+
+============================================================
+Building model
+============================================================
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights:  15%|█▍        | 75/512 [00:00<00:00, 734.11it/s]Loading weights:  29%|██▉       | 149/512 [00:00<00:00, 700.03it/s]Loading weights:  44%|████▍     | 226/512 [00:00<00:00, 728.34it/s]Loading weights:  58%|█████▊    | 299/512 [00:00<00:00, 705.23it/s]Loading weights:  72%|███████▏  | 370/512 [00:00<00:00, 660.12it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 908.03it/s]
+/home/zivcz/.conda/envs/eeg2graph/lib/python3.11/site-packages/torch/nn/modules/transformer.py:382: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  warnings.warn(
+  BART/REBEL frozen — training bridge only.
+  Trainable params: 27,174,912 (bridge: 1,914,880, bart: 25,260,032)
+
+============================================================
+Training
+============================================================
+  Epoch   1/60 | train_loss=8.9703 | align=3.3880 | val_loss=5.1930 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=3.00e-04, bart=0.00e+00..0.00e+00] | 64.8s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1930
+  Epoch   2/60 | train_loss=8.6105 | align=3.1099 | val_loss=5.1593 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.99e-04, bart=0.00e+00..0.00e+00] | 63.8s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1593
+  Epoch   3/60 | train_loss=8.6354 | align=3.1173 | val_loss=5.1964 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.98e-04, bart=0.00e+00..0.00e+00] | 74.8s
+  Epoch   4/60 | train_loss=8.6100 | align=3.0939 | val_loss=5.0917 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.97e-04, bart=0.00e+00..0.00e+00] | 64.2s
+    New best checkpoint: val_F1=0.0000, val_loss=5.0917
+  Epoch   5/60 | train_loss=8.5593 | align=3.0928 | val_loss=5.0904 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.95e-04, bart=0.00e+00..0.00e+00] | 63.7s
+    New best checkpoint: val_F1=0.0000, val_loss=5.0904
+  Epoch   6/60 | train_loss=8.5384 | align=3.0959 | val_loss=5.0749 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.93e-04, bart=0.00e+00..0.00e+00] | 64.3s
+    New best checkpoint: val_F1=0.0000, val_loss=5.0749
+  Epoch   7/60 | train_loss=8.4620 | align=3.0733 | val_loss=4.9660 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.90e-04, bart=0.00e+00..0.00e+00] | 65.5s
+    New best checkpoint: val_F1=0.0000, val_loss=4.9660
+  Epoch   8/60 | train_loss=8.3654 | align=3.0590 | val_loss=4.8283 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.87e-04, bart=0.00e+00..0.00e+00] | 66.5s
+    New best checkpoint: val_F1=0.0000, val_loss=4.8283
+  Epoch   9/60 | train_loss=8.2857 | align=3.0395 | val_loss=4.8198 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.84e-04, bart=0.00e+00..0.00e+00] | 64.1s
+    New best checkpoint: val_F1=0.0000, val_loss=4.8198
+  Epoch  10/60 | train_loss=8.2853 | align=3.0370 | val_loss=4.7382 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.80e-04, bart=0.00e+00..0.00e+00] | 68.6s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('The Great Gatsby', 'author', 'Gatsby')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('The Great Gatsby', 'author', 'Gatsby')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('The Great Gatsby', 'author', 'Gatsby')]
+    New best checkpoint: val_F1=0.0000, val_loss=4.7382
+  Epoch  11/60 | train_loss=8.2523 | align=3.0308 | val_loss=4.7680 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.76e-04, bart=0.00e+00..0.00e+00] | 68.4s
+  Epoch  12/60 | train_loss=8.2115 | align=3.0131 | val_loss=4.7342 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.71e-04, bart=0.00e+00..0.00e+00] | 68.1s
+    New best checkpoint: val_F1=0.0000, val_loss=4.7342
+  Epoch  13/60 | train_loss=8.1701 | align=3.0090 | val_loss=4.6915 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.67e-04, bart=0.00e+00..0.00e+00] | 66.1s
+    New best checkpoint: val_F1=0.0000, val_loss=4.6915
+  Epoch  14/60 | train_loss=8.2081 | align=3.0287 | val_loss=4.8568 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.62e-04, bart=0.00e+00..0.00e+00] | 68.4s
+  Epoch  15/60 | train_loss=8.2559 | align=3.0595 | val_loss=4.6848 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.56e-04, bart=0.00e+00..0.00e+00] | 66.1s
+    New best checkpoint: val_F1=0.0000, val_loss=4.6848
+  Epoch  16/60 | train_loss=8.2359 | align=3.0706 | val_loss=4.6870 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.50e-04, bart=0.00e+00..0.00e+00] | 68.2s
+  Epoch  17/60 | train_loss=8.1534 | align=2.9904 | val_loss=4.7104 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.44e-04, bart=0.00e+00..0.00e+00] | 64.4s
+  Epoch  18/60 | train_loss=8.1231 | align=2.9918 | val_loss=4.7097 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.38e-04, bart=0.00e+00..0.00e+00] | 66.9s
+  Epoch  19/60 | train_loss=8.1174 | align=2.9866 | val_loss=4.6858 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.32e-04, bart=0.00e+00..0.00e+00] | 70.4s
+  Epoch  20/60 | train_loss=8.1373 | align=2.9909 | val_loss=4.6231 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.25e-04, bart=0.00e+00..0.00e+00] | 73.1s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('The Great Gatsby', 'cast member', 'Gatsby')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('The Great Gatsby', 'present in work', 'The Great Gatsby')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('The Great Gatsby', 'present in work', 'The Great Gatsby')]
+    New best checkpoint: val_F1=0.0000, val_loss=4.6231
+  Epoch  21/60 | train_loss=8.0897 | align=2.9747 | val_loss=4.6520 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.18e-04, bart=0.00e+00..0.00e+00] | 66.7s
+  Epoch  22/60 | train_loss=8.0551 | align=2.9660 | val_loss=4.6363 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.11e-04, bart=0.00e+00..0.00e+00] | 75.6s
+  Epoch  23/60 | train_loss=8.0813 | align=2.9683 | val_loss=4.6113 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.04e-04, bart=0.00e+00..0.00e+00] | 85.3s
+    New best checkpoint: val_F1=0.0000, val_loss=4.6113
+  Epoch  24/60 | train_loss=8.0492 | align=2.9559 | val_loss=4.6201 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.96e-04, bart=0.00e+00..0.00e+00] | 76.4s
+  Epoch  25/60 | train_loss=8.0813 | align=2.9660 | val_loss=4.5883 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.89e-04, bart=0.00e+00..0.00e+00] | 76.9s
+    New best checkpoint: val_F1=0.0000, val_loss=4.5883
+  Epoch  26/60 | train_loss=8.0388 | align=2.9574 | val_loss=4.5646 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.81e-04, bart=0.00e+00..0.00e+00] | 71.1s
+    New best checkpoint: val_F1=0.0000, val_loss=4.5646
+  Epoch  27/60 | train_loss=8.0523 | align=2.9581 | val_loss=4.6158 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.74e-04, bart=0.00e+00..0.00e+00] | 73.6s
+  Epoch  28/60 | train_loss=8.0419 | align=2.9459 | val_loss=4.6283 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.66e-04, bart=0.00e+00..0.00e+00] | 72.0s
+  Epoch  29/60 | train_loss=8.0176 | align=2.9358 | val_loss=4.6007 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.58e-04, bart=0.00e+00..0.00e+00] | 79.3s
+  Epoch  30/60 | train_loss=8.0274 | align=2.9369 | val_loss=4.6438 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.50e-04, bart=0.00e+00..0.00e+00] | 74.4s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('The Great Gatsby', 'present in work', 'The Great Gatsby')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('The Great Gatsby', 'present in work', 'The Great Gatsby')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('The Great Gatsby', 'present in work', 'The Great Gatsby')]
+  Epoch  31/60 | train_loss=7.9944 | align=2.9385 | val_loss=4.6674 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.42e-04, bart=0.00e+00..0.00e+00] | 72.0s
+  Epoch  32/60 | train_loss=7.9934 | align=2.9311 | val_loss=4.6625 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.34e-04, bart=0.00e+00..0.00e+00] | 73.1s
+  Epoch  33/60 | train_loss=7.9917 | align=2.9215 | val_loss=4.6504 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.27e-04, bart=0.00e+00..0.00e+00] | 72.3s
+  Epoch  34/60 | train_loss=7.9911 | align=2.9230 | val_loss=4.6477 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.19e-04, bart=0.00e+00..0.00e+00] | 72.8s
+  Epoch  35/60 | train_loss=8.0015 | align=2.9157 | val_loss=4.5974 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.11e-04, bart=0.00e+00..0.00e+00] | 79.0s
+  Epoch  36/60 | train_loss=7.9784 | align=2.9085 | val_loss=4.6446 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.04e-04, bart=0.00e+00..0.00e+00] | 74.5s
+  Epoch  37/60 | train_loss=7.9819 | align=2.8983 | val_loss=4.6472 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=9.64e-05, bart=0.00e+00..0.00e+00] | 76.8s
+  Epoch  38/60 | train_loss=7.9397 | align=2.8966 | val_loss=4.6976 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.92e-05, bart=0.00e+00..0.00e+00] | 70.7s
+  Epoch  39/60 | train_loss=7.9498 | align=2.8983 | val_loss=4.6644 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=8.21e-05, bart=0.00e+00..0.00e+00] | 74.7s
+  Epoch  40/60 | train_loss=7.9355 | align=2.8928 | val_loss=4.7051 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.52e-05, bart=0.00e+00..0.00e+00] | 70.9s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('The Great Gatsby', 'cast member', 'Gwyneth Paltrow')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('The Great Gatsby', 'author', 'Gatsby')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('The Great Gatsby', 'author', 'Gatsby')]
+  Epoch  41/60 | train_loss=7.9184 | align=2.8858 | val_loss=4.6905 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=6.85e-05, bart=0.00e+00..0.00e+00] | 73.1s
+  Epoch  42/60 | train_loss=7.9251 | align=2.8874 | val_loss=4.7239 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=6.21e-05, bart=0.00e+00..0.00e+00] | 73.1s
+  Epoch  43/60 | train_loss=7.9157 | align=2.8827 | val_loss=4.6921 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=5.58e-05, bart=0.00e+00..0.00e+00] | 78.2s
+  Epoch  44/60 | train_loss=7.9337 | align=2.8838 | val_loss=4.6978 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=4.99e-05, bart=0.00e+00..0.00e+00] | 74.5s
+  Epoch  45/60 | train_loss=7.9271 | align=2.8809 | val_loss=4.7074 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=4.42e-05, bart=0.00e+00..0.00e+00] | 73.3s
+  Epoch  46/60 | train_loss=7.9131 | align=2.8768 | val_loss=4.7229 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=3.88e-05, bart=0.00e+00..0.00e+00] | 80.2s
+  Epoch  47/60 | train_loss=7.8867 | align=2.8650 | val_loss=4.7161 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=3.37e-05, bart=0.00e+00..0.00e+00] | 80.5s
+  Epoch  48/60 | train_loss=7.9087 | align=2.8603 | val_loss=4.7404 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.89e-05, bart=0.00e+00..0.00e+00] | 85.8s
+  Epoch  49/60 | train_loss=7.9028 | align=2.8848 | val_loss=4.7299 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.45e-05, bart=0.00e+00..0.00e+00] | 78.9s
+  Epoch  50/60 | train_loss=7.8901 | align=2.8621 | val_loss=4.7254 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.04e-05, bart=0.00e+00..0.00e+00] | 83.5s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('The Great Gatsby', 'author', 'Christopher Tolkien')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('The Great Gatsby', 'author', 'Christopher Tolkien')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('The Great Gatsby', 'author', 'Christopher Tolkien')]
+  Epoch  51/60 | train_loss=7.8990 | align=2.8682 | val_loss=4.7554 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.66e-05, bart=0.00e+00..0.00e+00] | 82.8s
+
+  Early stopping at epoch 51 (no val loss improvement for 25 epochs)
+
+============================================================
+Test Evaluation (beam search)
+============================================================
+  Test F1:        0.0057
+  Test Precision: 0.0053
+  Test Recall:    0.0062
+  Predicted:      2249 triplets
+  Gold:           1936 triplets
+  Correct:        12 triplets
+
+Done!
+END=Wed 03 Jun 2026 20:51:33 IDT

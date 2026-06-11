@@ -1,0 +1,55 @@
+------------------------------------
+Thu 04 Jun 2026 12:36:50 IDT
+SLURM_JOBID:		17995163
+SLURM_JOB_NODELIST:	ee-l40s-01
+SLURM_SCRATCH_DIR:	/scratch/zivcz/17995163
+Allocated Resouces:	cpu - 8 / mem - 49152 MB / gpu - 4
+SLURM_GPU_INDEX:	4
+Running as zivcz from eliyanac account with eliyanac QOS
+------------------------------------
+JOBID=17995163
+NODELIST=ee-l40s-01
+START=Thu 04 Jun 2026 12:36:50 IDT
+Thu Jun  4 12:36:50 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L40S                    On  |   00000000:83:00.0 Off |                    0 |
+| N/A   25C    P8             32W /  350W |       0MiB /  46068MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+usage: train.py [-h] --processed_dir PROCESSED_DIR --triplets_path
+                TRIPLETS_PATH [--output_dir OUTPUT_DIR]
+                [--bart_name BART_NAME] [--eeg_dim EEG_DIM]
+                [--dropout DROPOUT] [--epochs EPOCHS]
+                [--batch_size BATCH_SIZE] [--bridge_lr BRIDGE_LR]
+                [--bart_lr BART_LR] [--freeze_bart]
+                [--warmup_epochs WARMUP_EPOCHS]
+                [--bart_warmup_epochs BART_WARMUP_EPOCHS]
+                [--llrd_gamma LLRD_GAMMA] [--bart_dropout BART_DROPOUT]
+                [--bart_attention_dropout BART_ATTENTION_DROPOUT]
+                [--bart_weight_decay BART_WEIGHT_DECAY]
+                [--bridge_layers BRIDGE_LAYERS] [--patience PATIENCE]
+                [--weight_decay WEIGHT_DECAY] [--grad_clip GRAD_CLIP]
+                [--label_smoothing LABEL_SMOOTHING]
+                [--align_weight ALIGN_WEIGHT] [--align_temp ALIGN_TEMP]
+                [--align_mode {pooled,perword}] [--save_every SAVE_EVERY]
+                [--eval_train] [--max_src_len MAX_SRC_LEN]
+                [--max_tgt_len MAX_TGT_LEN] [--max_text_len MAX_TEXT_LEN]
+                [--num_workers NUM_WORKERS] [--limit_train LIMIT_TRAIN]
+                [--limit_val LIMIT_VAL] [--limit_test LIMIT_TEST]
+                [--beam_size BEAM_SIZE]
+train.py: error: unrecognized arguments: --seed 42
+END=Thu 04 Jun 2026 12:37:12 IDT

@@ -1,0 +1,89 @@
+------------------------------------
+Thu 11 Jun 2026 10:35:16 IDT
+SLURM_JOBID:		18096362
+SLURM_JOB_NODELIST:	ee-l40s-01
+SLURM_SCRATCH_DIR:	/scratch/zivcz/18096362
+Allocated Resouces:	cpu - 8 / mem - 49152 MB / gpu - 1
+SLURM_GPU_INDEX:	1
+Running as zivcz from eliyanac account with eliyanac QOS
+------------------------------------
+JOBID=18096362
+NODELIST=ee-l40s-01
+START=Thu 11 Jun 2026 10:35:16 IDT
+Thu Jun 11 10:35:16 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L40S                    On  |   00000000:04:00.0 Off |                    0 |
+| N/A   28C    P8             32W /  350W |       0MiB /  46068MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Device: cuda
+
+============================================================
+Loading data
+============================================================
+
+Loading train:
+  10216 samples, 10216 with triplets (100.0%)
+
+Loading val:
+  1313 samples, 1313 with triplets (100.0%)
+
+Loading test:
+  1246 samples, 1246 with triplets (100.0%)
+
+Tokenizer vocab size: 50272
+
+============================================================
+Building model
+============================================================
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 12099.32it/s]
+  Trainable params: 408,213,504 (bridge: 1,914,880, bart: 406,298,624)
+
+  Phase 1: BART frozen for 10 warmup epochs (bridge-only)
+
+  Decoder-input token noise: p=0.25, mask_id=50264, protected=(1, 0, 2, 50267, 50266, 50265)
+
+============================================================
+Training
+============================================================
+  Epoch   1/80 | train_loss=10.6011 | align=3.6522 | val_loss=5.2451 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.93e-04, bart=0.00e+00..0.00e+00] | 67.9s
+    New best checkpoint: val_F1=0.0000, val_loss=5.2451
+  Epoch   2/80 | train_loss=10.1227 | align=3.2387 | val_loss=5.2776 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.71e-04, bart=0.00e+00..0.00e+00] | 66.5s
+  Epoch   3/80 | train_loss=10.1322 | align=3.2365 | val_loss=5.2248 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.38e-04, bart=0.00e+00..0.00e+00] | 69.3s
+    New best checkpoint: val_F1=0.0000, val_loss=5.2248
+  Epoch   4/80 | train_loss=10.1434 | align=3.3240 | val_loss=5.1837 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.96e-04, bart=0.00e+00..0.00e+00] | 66.0s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1837
+  Epoch   5/80 | train_loss=10.0095 | align=3.2652 | val_loss=5.2345 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.50e-04, bart=0.00e+00..0.00e+00] | 71.6s
+  Epoch   6/80 | train_loss=9.9238 | align=3.1486 | val_loss=5.1500 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=1.04e-04, bart=0.00e+00..0.00e+00] | 70.0s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1500
+  Epoch   7/80 | train_loss=9.9472 | align=3.1688 | val_loss=5.1290 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=6.21e-05, bart=0.00e+00..0.00e+00] | 70.8s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1290
+  Epoch   8/80 | train_loss=9.9107 | align=3.1335 | val_loss=5.1322 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=2.89e-05, bart=0.00e+00..0.00e+00] | 71.3s
+  Epoch   9/80 | train_loss=9.8759 | align=3.1367 | val_loss=5.1275 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=7.63e-06, bart=0.00e+00..0.00e+00] | 71.0s
+    New best checkpoint: val_F1=0.0000, val_loss=5.1275
+  Epoch  10/80 | train_loss=9.8570 | align=3.1328 | val_loss=5.1261 | val_F1=0.0000 (P=0.000 R=0.000) | lr=[bridge=3.00e-07, bart=0.00e+00..0.00e+00] | 70.4s
+    Sample predictions:
+      [0] Gold (1): [('Detroit Automobile Company', 'follows', 'Edison Illuminating')]
+          Pred (1): [('The Great Gatsby', 'cast member', 'Michael Bolton')]
+      [1] Gold (1): [('Quadricycle', 'inception', '1896')]
+          Pred (1): [('The Great Gatsby', 'cast member', 'Michael Bolton')]
+      [2] Gold (1): [('Nazi regime', 'head of state', 'Adolf Hitler')]
+          Pred (1): [('The Great Gatsby', 'cast member', 'Michael Bolton')]
+    New best checkpoint: val_F1=0.0000, val_loss=5.1261
+
+  Phase 2: BART unfrozen (408,213,504 trainable params, 26 LLRD groups, 70 epochs, BART warmup=3 epochs, llrd_gamma=0.8)
