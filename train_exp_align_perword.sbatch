@@ -36,7 +36,6 @@ python train.py \
     --processed_dir ../processed_zuco2 \
     --triplets_path ../processed_zuco2/sentence_triplets.json \
     --output_dir ../checkpoints_align_perword \
-    --seed 42 \
     --epochs 80 \
     --batch_size 16 \
     --num_workers 4 \
