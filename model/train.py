@@ -263,6 +263,16 @@ def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
+    # Reproducibility: seed model init + DataLoader shuffle. (The original
+    # exp/align-perword job passed --seed but argparse lacked it, so it crashed.)
+    import random
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+    import numpy as np
+    np.random.seed(args.seed)
+
     os.makedirs(args.output_dir, exist_ok=True)
 
     # ---- Data ----
@@ -275,6 +285,7 @@ def main(args):
         "val": args.limit_val,
         "test": args.limit_test,
     }
+    exclude_subjects = [s for s in args.exclude_subjects.split(",") if s.strip()]
     loaders, tokenizer = build_dataloaders(
         args.processed_dir, args.triplets_path,
         batch_size=args.batch_size,
@@ -284,6 +295,9 @@ def main(args):
         num_workers=args.num_workers,
         bart_name=args.bart_name,
         limits=limits,
+        seed=args.seed,
+        train_sentence_frac=args.train_sentence_frac,
+        exclude_subjects=exclude_subjects,
     )
 
     tokenizer_dir = os.path.join(args.output_dir, "tokenizer")
@@ -660,6 +674,16 @@ if __name__ == "__main__":
                         help="Max gold-text token length for the alignment "
                              "teacher path.")
     parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Seed for model init and train DataLoader shuffle.")
+    parser.add_argument("--train_sentence_frac", type=float, default=None,
+                        help="Keep only this fraction (0,1] of TRAIN unique "
+                             "sentences (deterministic by --seed). For the E6 "
+                             "data-scaling curve; val/test stay full.")
+    parser.add_argument("--exclude_subjects", type=str, default="",
+                        help="Comma-separated subject ids to drop from TRAIN "
+                             "(E8 cross-subject study). val/test keep all "
+                             "subjects so held-out subjects can be scored.")
     parser.add_argument("--limit_train", type=int, default=0,
                         help="If >0, use only the first N training samples (CPU sanity runs)")
     parser.add_argument("--limit_val", type=int, default=0,

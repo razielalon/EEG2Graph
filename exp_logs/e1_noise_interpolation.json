@@ -1,0 +1,166 @@
+{
+  "split": "test",
+  "n_sentences": 67,
+  "gen_kwargs": {
+    "max_length": 256,
+    "num_beams": 5,
+    "length_penalty": 1.0,
+    "early_stopping": false
+  },
+  "upper_bound": {
+    "extract": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "n_pred": 106,
+      "n_gold": 106,
+      "n_correct": 106
+    },
+    "delinearize": {
+      "precision": 0.7452830188679245,
+      "recall": 0.7452830188679245,
+      "f1": 0.7452830188679244,
+      "n_pred": 106,
+      "n_gold": 106,
+      "n_correct": 79
+    }
+  },
+  "curve": [
+    {
+      "alpha": 1.0,
+      "align_cosine": 1.0,
+      "align_retrieval": 1.0,
+      "f1_extract": 1.0,
+      "f1_delinearize": 0.7452830188679244,
+      "precision_extract": 1.0,
+      "recall_extract": 1.0
+    },
+    {
+      "alpha": 0.95,
+      "align_cosine": 0.9994195699691772,
+      "align_retrieval": 1.0,
+      "f1_extract": 0.9339622641509434,
+      "f1_delinearize": 0.6981132075471698,
+      "precision_extract": 0.9339622641509434,
+      "recall_extract": 0.9339622641509434
+    },
+    {
+      "alpha": 0.9,
+      "align_cosine": 0.997585117816925,
+      "align_retrieval": 1.0,
+      "f1_extract": 0.7677725118483413,
+      "f1_delinearize": 0.5687203791469193,
+      "precision_extract": 0.7714285714285715,
+      "recall_extract": 0.7641509433962265
+    },
+    {
+      "alpha": 0.85,
+      "align_cosine": 0.9943568706512451,
+      "align_retrieval": 1.0,
+      "f1_extract": 0.7227722772277227,
+      "f1_delinearize": 0.5148514851485149,
+      "precision_extract": 0.7604166666666666,
+      "recall_extract": 0.6886792452830188
+    },
+    {
+      "alpha": 0.8,
+      "align_cosine": 0.9895992875099182,
+      "align_retrieval": 1.0,
+      "f1_extract": 0.624390243902439,
+      "f1_delinearize": 0.4878048780487805,
+      "precision_extract": 0.6464646464646465,
+      "recall_extract": 0.6037735849056604
+    },
+    {
+      "alpha": 0.75,
+      "align_cosine": 0.9831861853599548,
+      "align_retrieval": 1.0,
+      "f1_extract": 0.5603864734299516,
+      "f1_delinearize": 0.45410628019323673,
+      "precision_extract": 0.5742574257425742,
+      "recall_extract": 0.5471698113207547
+    },
+    {
+      "alpha": 0.7,
+      "align_cosine": 0.9750072360038757,
+      "align_retrieval": 1.0,
+      "f1_extract": 0.4752475247524752,
+      "f1_delinearize": 0.3861386138613861,
+      "precision_extract": 0.5,
+      "recall_extract": 0.4528301886792453
+    },
+    {
+      "alpha": 0.65,
+      "align_cosine": 0.9649725556373596,
+      "align_retrieval": 1.0,
+      "f1_extract": 0.27,
+      "f1_delinearize": 0.24,
+      "precision_extract": 0.2872340425531915,
+      "recall_extract": 0.25471698113207547
+    },
+    {
+      "alpha": 0.6,
+      "align_cosine": 0.953018844127655,
+      "align_retrieval": 1.0,
+      "f1_extract": 0.06779661016949153,
+      "f1_delinearize": 0.06779661016949153,
+      "precision_extract": 0.08450704225352113,
+      "recall_extract": 0.05660377358490566
+    },
+    {
+      "alpha": 0.5,
+      "align_cosine": 0.9232498407363892,
+      "align_retrieval": 0.9850746393203735,
+      "f1_extract": 0.0,
+      "f1_delinearize": 0.0,
+      "precision_extract": 0.0,
+      "recall_extract": 0.0
+    },
+    {
+      "alpha": 0.4,
+      "align_cosine": 0.885810911655426,
+      "align_retrieval": 0.9850746393203735,
+      "f1_extract": 0.0,
+      "f1_delinearize": 0.0,
+      "precision_extract": 0.0,
+      "recall_extract": 0.0
+    },
+    {
+      "alpha": 0.3,
+      "align_cosine": 0.8413087129592896,
+      "align_retrieval": 0.8507462739944458,
+      "f1_extract": 0.0,
+      "f1_delinearize": 0.0,
+      "precision_extract": 0.0,
+      "recall_extract": 0.0
+    },
+    {
+      "alpha": 0.2,
+      "align_cosine": 0.7907717823982239,
+      "align_retrieval": 0.46268656849861145,
+      "f1_extract": 0.0,
+      "f1_delinearize": 0.0,
+      "precision_extract": 0.0,
+      "recall_extract": 0.0
+    },
+    {
+      "alpha": 0.1,
+      "align_cosine": 0.7355276942253113,
+      "align_retrieval": 0.16417910158634186,
+      "f1_extract": 0.0,
+      "f1_delinearize": 0.0,
+      "precision_extract": 0.0,
+      "recall_extract": 0.0
+    },
+    {
+      "alpha": 0.0,
+      "align_cosine": 0.6770562529563904,
+      "align_retrieval": 0.014925372786819935,
+      "f1_extract": 0.0,
+      "f1_delinearize": 0.0,
+      "precision_extract": 0.0,
+      "recall_extract": 0.0
+    }
+  ],
+  "bridge_retrieval": null
+}
