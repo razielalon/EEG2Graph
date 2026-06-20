@@ -1,0 +1,47 @@
+{
+  "decoder_noise": {
+    "n_samples": 1246,
+    "unique_pred_rate": 0.002407704654895666,
+    "n_unique_predictions": 3,
+    "top1_share": 0.8603531300160514,
+    "pred_entropy_bits": 0.7061859190779818,
+    "empty_rate": 0.0,
+    "mean_pred_triplets": 1.0979133226324238,
+    "distinct1": 0.002407704654895666,
+    "distinct2": 0.0017793594306049821,
+    "train_memorization": 1.0,
+    "n_pred_tuples": 1368,
+    "most_common_prediction": [
+      [
+        "the facts of life",
+        "instance of",
+        "series"
+      ]
+    ]
+  },
+  "subject_temporal": {
+    "n_samples": 1246,
+    "unique_pred_rate": 0.01765650080256822,
+    "n_unique_predictions": 22,
+    "top1_share": 0.3258426966292135,
+    "pred_entropy_bits": 2.9412255029642864,
+    "empty_rate": 0.0,
+    "mean_pred_triplets": 1.804975922953451,
+    "distinct1": 0.0035575679172056922,
+    "distinct2": 0.004575495678698526,
+    "train_memorization": 0.18497109826589594,
+    "n_pred_tuples": 2249,
+    "most_common_prediction": [
+      [
+        "holocaust",
+        "has cause",
+        "world war i"
+      ],
+      [
+        "world war i",
+        "has effect",
+        "holocaust"
+      ]
+    ]
+  }
+}
