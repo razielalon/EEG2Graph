@@ -230,6 +230,21 @@ def collate_fn(batch, pad_id, n_subject_buckets=0):
 # Build dataloaders
 # =============================================================================
 
+def _select_sentence_fraction(ds, frac, seed):
+    """Indices for a deterministic fraction of the split's UNIQUE sentences.
+
+    Subsampling by sentence (not by sample) preserves the split invariant —
+    the same sentence read by multiple subjects stays together — so the
+    data-scaling curve (E6) measures the effect of seeing fewer *sentences*,
+    not fewer copies of the same one.
+    """
+    texts = sorted({ds.samples[i]["meta"]["text"] for i in range(len(ds))})
+    rng = np.random.default_rng(seed)
+    rng.shuffle(texts)
+    keep = set(texts[:max(1, int(round(frac * len(texts))))])
+    return [i for i in range(len(ds)) if ds.samples[i]["meta"]["text"] in keep]
+
+
 def build_dataloaders(
     processed_dir,
     triplets_path,
@@ -242,6 +257,9 @@ def build_dataloaders(
     tokenizer=None,
     limits=None,
     n_subject_buckets=0,
+    seed=0,
+    train_sentence_frac=None,
+    exclude_subjects=None,
 ):
     """
     Build train/val/test dataloaders and a tokenizer.
@@ -253,6 +271,17 @@ def build_dataloaders(
     that are None or 0 leave the corresponding split at full size. Useful for
     fast CPU sanity runs.
 
+    `seed`: seeds the train DataLoader shuffle (reproducible runs) and the
+    sentence-fraction subsample below.
+
+    `train_sentence_frac`: if set (0,1], keep only this fraction of the TRAIN
+    split's unique sentences (deterministic by `seed`) for the E6 data-scaling
+    curve. val/test are always left full.
+
+    `exclude_subjects`: iterable of subject ids dropped from the TRAIN split for
+    the E8 cross-subject study. val/test keep all subjects so held-out subjects
+    can still be scored at eval time.
+
     Returns:
         dataloaders: dict of DataLoaders
         tokenizer:   the BART tokenizer (with structural tokens added)
@@ -263,6 +292,9 @@ def build_dataloaders(
     collate = partial(collate_fn, pad_id=tokenizer.pad_token_id,
                       n_subject_buckets=n_subject_buckets)
     limits = limits or {}
+    exclude_subjects = set(exclude_subjects or [])
+
+    generator = torch.Generator().manual_seed(seed)
 
     loaders = {}
     for split in ["train", "val", "test"]:
@@ -276,6 +308,22 @@ def build_dataloaders(
         ds = EEGGraphDataset(eeg_path, meta_path, triplets_path, tokenizer,
                              max_src_len, max_tgt_len, max_text_len)
 
+        # Train-only filters: subject exclusion then sentence-fraction subsample.
+        if split == "train":
+            idx = list(range(len(ds)))
+            if exclude_subjects:
+                idx = [i for i in idx
+                       if ds.samples[i]["meta"]["subject_id"] not in exclude_subjects]
+                print(f"  (excluded subjects {sorted(exclude_subjects)}: "
+                      f"{len(idx)}/{len(ds)} samples kept)")
+            if train_sentence_frac and 0 < train_sentence_frac < 1:
+                keep = set(_select_sentence_fraction(ds, train_sentence_frac, seed))
+                idx = [i for i in idx if i in keep]
+                print(f"  (sentence fraction {train_sentence_frac}: "
+                      f"{len(idx)} samples kept)")
+            if len(idx) < len(ds):
+                ds = Subset(ds, idx)
+
         limit = limits.get(split)
         if limit and limit < len(ds):
             ds = Subset(ds, list(range(limit)))
@@ -284,6 +332,7 @@ def build_dataloaders(
         loaders[split] = DataLoader(
             ds, batch_size=batch_size, shuffle=(split == "train"),
             collate_fn=collate, num_workers=num_workers, pin_memory=True,
+            generator=generator if split == "train" else None,
         )
 
     return loaders, tokenizer

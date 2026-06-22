@@ -130,6 +130,78 @@ def contrastive_alignment_loss(h_eeg, eeg_mask, h_text, text_mask, texts,
                   + F.cross_entropy(logits.t(), target))
 
 
+def contrastive_alignment_perword(h_eeg, eeg_mask, h_text, text_mask, texts,
+                                  temperature=0.07):
+    """
+    Per-position InfoNCE between EEG word positions and text token positions.
+
+    Unlike `contrastive_alignment_loss` (pooled, one anchor per sentence), this
+    treats every EEG word position and every text token position as a separate
+    anchor. Positives are positions from the SAME sentence (across modalities);
+    negatives are positions from other sentences in the batch. Pairs whose
+    sentence text is identical (same sentence read by two subjects) are also
+    positives, never negatives.
+
+    This is a much denser supervision signal than the pooled variant. The
+    pooled loss plateaued near 2.7 across all four prior runs — per-position
+    contrast gives the bridge gradient on every word position rather than only
+    the pooled summary.
+    """
+    B, S_e, D = h_eeg.shape
+    _, S_t, _ = h_text.shape
+    device = h_eeg.device
+
+    e_flat = F.normalize(h_eeg.reshape(B * S_e, D), dim=-1)
+    t_flat = F.normalize(h_text.reshape(B * S_t, D), dim=-1)
+
+    e_valid = eeg_mask.reshape(B * S_e).bool()
+    t_valid = text_mask.reshape(B * S_t).bool()
+
+    # Map each sample to a sentence-ID so duplicate texts share positives.
+    sent_id_by_text = {}
+    sample_sent = torch.empty(B, dtype=torch.long, device=device)
+    for i, tx in enumerate(texts):
+        if tx not in sent_id_by_text:
+            sent_id_by_text[tx] = len(sent_id_by_text)
+        sample_sent[i] = sent_id_by_text[tx]
+
+    e_sent = sample_sent.repeat_interleave(S_e)
+    t_sent = sample_sent.repeat_interleave(S_t)
+
+    logits = (e_flat @ t_flat.t()) / temperature             # (N_e, N_t)
+
+    same_sent = e_sent[:, None] == t_sent[None, :]
+    pos = same_sent & e_valid[:, None] & t_valid[None, :]
+
+    # E→T direction: mask only invalid TEXT columns so rows of invalid EEG
+    # anchors still softmax over a non-empty set (NaN otherwise). The masked
+    # -inf cells aren't positives, but `(-inf) * 0` evaluates to NaN — so use
+    # masked_fill to drop log-probs at non-positive cells to 0 before summing.
+    logits_et = logits.masked_fill(~t_valid[None, :], float("-inf"))
+    log_prob_et = F.log_softmax(logits_et, dim=1).masked_fill(~pos, 0.0)
+    n_pos_e = pos.sum(dim=1)
+    has_pos_e = (n_pos_e > 0) & e_valid
+    if has_pos_e.any():
+        loss_e = -log_prob_et.sum(dim=1)
+        loss_e = (loss_e[has_pos_e] / n_pos_e[has_pos_e].clamp(min=1)).mean()
+    else:
+        loss_e = torch.tensor(0.0, device=device)
+
+    # T→E direction: symmetric, mask only invalid EEG columns.
+    pos_t = pos.t()
+    logits_te = logits.t().masked_fill(~e_valid[None, :], float("-inf"))
+    log_prob_te = F.log_softmax(logits_te, dim=1).masked_fill(~pos_t, 0.0)
+    n_pos_t = pos_t.sum(dim=1)
+    has_pos_t = (n_pos_t > 0) & t_valid
+    if has_pos_t.any():
+        loss_t = -log_prob_te.sum(dim=1)
+        loss_t = (loss_t[has_pos_t] / n_pos_t[has_pos_t].clamp(min=1)).mean()
+    else:
+        loss_t = torch.tensor(0.0, device=device)
+
+    return 0.5 * (loss_e + loss_t)
+
+
 # =============================================================================
 # Evaluation Metrics
 # =============================================================================
@@ -184,7 +256,8 @@ def _log_sample_predictions(preds, golds, n=3):
 # =============================================================================
 
 def train_epoch(model, loader, criterion, optimizer, scheduler, device,
-                grad_clip=1.0, align_weight=0.0, align_temp=0.07):
+                grad_clip=1.0, align_weight=0.0, align_temp=0.07,
+                align_mode="pooled"):
     """
     One training epoch. Loss = label-smoothed CE + align_weight * contrastive
     text-encoder alignment. When align_weight is 0 the teacher pass is skipped
@@ -213,7 +286,9 @@ def train_epoch(model, loader, criterion, optimizer, scheduler, device,
             text_mask = batch["text_mask"].to(device)
             h_text = model.encode_text(text_ids, text_mask)
             texts = [m["text"] for m in batch["meta"]]
-            align = contrastive_alignment_loss(
+            align_fn = (contrastive_alignment_perword if align_mode == "perword"
+                        else contrastive_alignment_loss)
+            align = align_fn(
                 h_eeg, src_mask, h_text, text_mask, texts, temperature=align_temp,
             )
             loss = ce + align_weight * align
@@ -302,6 +377,7 @@ def main(args):
         "val": args.limit_val,
         "test": args.limit_test,
     }
+    exclude_subjects = [s for s in args.exclude_subjects.split(",") if s.strip()]
     loaders, tokenizer = build_dataloaders(
         args.processed_dir, args.triplets_path,
         batch_size=args.batch_size,
@@ -312,6 +388,9 @@ def main(args):
         bart_name=args.bart_name,
         limits=limits,
         n_subject_buckets=args.n_subject_buckets,
+        seed=args.seed,
+        train_sentence_frac=args.train_sentence_frac,
+        exclude_subjects=exclude_subjects,
     )
 
     tokenizer_dir = os.path.join(args.output_dir, "tokenizer")
@@ -429,7 +508,7 @@ def main(args):
         train_stats = train_epoch(
             model, loaders["train"], criterion, optimizer, scheduler, device,
             grad_clip=args.grad_clip, align_weight=args.align_weight,
-            align_temp=args.align_temp,
+            align_temp=args.align_temp, align_mode=args.align_mode,
         )
         train_loss = train_stats["loss"]
 
@@ -691,6 +770,14 @@ if __name__ == "__main__":
                              "the decoder shortcut. 0 disables it (CE-only).")
     parser.add_argument("--align_temp", type=float, default=0.07,
                         help="InfoNCE temperature for the alignment loss.")
+    parser.add_argument("--align_mode", type=str, default="pooled",
+                        choices=["pooled", "perword"],
+                        help="Alignment granularity. 'pooled' = one anchor per "
+                             "sentence (mean-pooled, B*B logits, baseline). "
+                             "'perword' = every EEG word position and text token "
+                             "is a separate anchor; positives are positions from "
+                             "the same sentence. Denser supervision targeting the "
+                             "~2.7 alignment-loss plateau seen in earlier runs.")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed (python/numpy/torch + cuDNN deterministic). "
                              "Keep identical across experiment branches so config "
@@ -708,6 +795,14 @@ if __name__ == "__main__":
                         help="Max gold-text token length for the alignment "
                              "teacher path.")
     parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument("--train_sentence_frac", type=float, default=None,
+                        help="Keep only this fraction (0,1] of TRAIN unique "
+                             "sentences (deterministic by --seed). For the E6 "
+                             "data-scaling curve; val/test stay full.")
+    parser.add_argument("--exclude_subjects", type=str, default="",
+                        help="Comma-separated subject ids to drop from TRAIN "
+                             "(E8 cross-subject study). val/test keep all "
+                             "subjects so held-out subjects can be scored.")
     parser.add_argument("--limit_train", type=int, default=0,
                         help="If >0, use only the first N training samples (CPU sanity runs)")
     parser.add_argument("--limit_val", type=int, default=0,
