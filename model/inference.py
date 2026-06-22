@@ -37,6 +37,10 @@ def load_model(checkpoint_path, tokenizer, device):
         eeg_dim=model_args.get("eeg_dim", 840),
         bart_name=bart_name,
         dropout=0.0,
+        bridge_layers=model_args.get("bridge_layers", 1),
+        n_subject_buckets=model_args.get("n_subject_buckets", 0),
+        bridge_transformer_layers=model_args.get("bridge_transformer_layers", 0),
+        bridge_nhead=model_args.get("bridge_nhead", 8),
     ).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
