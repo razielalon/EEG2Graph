@@ -2,4 +2,4 @@ venv/
 *.log
 processed_zuco2/
 processed_zuco1/
-__pycache__/
+__pycache__/checkpoints*/
