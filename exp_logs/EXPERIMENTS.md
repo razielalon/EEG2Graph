@@ -1,7 +1,8 @@
 # EEG2Graph — Experiment Index
 
 Master index of every experiment, which branch it lives on, what it found, and a
-deep-dive reading path for each. Generated 2026-06-27.
+deep-dive reading path for each. Generated 2026-06-27; updated 2026-07-03 (E5 grid
+completed 8/8 cells; E6 scaffolding built).
 
 > **Branch note:** the E-series writeups/data are **not on `main`**. E1–E4 live on
 > `exp/tier1-conclusions`; E5 lives on `exp/tier2-grid`. Use `git checkout <branch>`
@@ -25,12 +26,16 @@ Two families:
 | **E2** EEG-ablation (real/swap/zero) | RQ3 | writeup on `exp/tier1-conclusions`; eval code + checkpoints on `exp/decoder-noise`, `exp/subject-temporal` | The decoder *does* causally use the EEG (swap flips 56–93% of outputs, zero flips 54–100%), but the variation is non-functional — F1=0 in every condition. Bottleneck is EEG *misuse*, not EEG-blindness. |
 | **E3** Prediction-collapse analysis | RQ3 | `exp/tier1-conclusions` | Quantifies the shortcut: `decoder_noise` emits one triplet for 86% of inputs, 100% memorized from train. `subject_temporal` is ~4× more diverse — architecture moves it off the constant-output mode (correlational). |
 | **E4** EEG signal probes (REBEL-free) | RQ1 | `exp/tier1-conclusions` | Signal exists (~2.6× chance sentence retrieval, broadband, gamma-strongest) but it's *sentence-identity*, **not** the word-class/length structure the task needs. Bottleneck = representational alignment, not absence of signal. |
-| **E5** Frozen-BART component ablation grid | RQ4 | `exp/tier2-grid` | **PLAN + scaffolding only.** 2×2×2 grid (subject × temporal × align-mode) under frozen BART. Only cell 4 exists = **0.57% test F1** (the project's single non-zero result). 7 runs unbuilt. |
+| **E5** Frozen-BART component ablation grid | RQ4 | `exp/tier2-grid` | **COMPLETE — 8/8 cells (jobs 18451298–305).** 2×2×2 grid (subject × temporal × align-mode) under frozen BART. **Null result: the frozen ceiling is architecture-independent** — every cell lands at test F1 ≈ 0, best is cell #2 (subject-on/pooled) at **0.0083**, total spread 0.0083. Per-word alignment drives its own loss down (≈9→6.2) but scores exactly 0.0 F1 — the cliff is downstream, in the frozen decoder's cross-attention. Hands the story to E6 (data scale). |
 
-**Planned, not yet run** (flags already merged into `exp/tier2-grid`): **E6**
-data-scaling (`--train_sentence_frac`), **E8** cross-subject (`--exclude_subjects`),
-**E10** difficulty ladder. **E7** = the per-position InfoNCE, which *is*
-`exp/align-perword` (Family B).
+**E6 built, not yet launched** (`exp/tier2-grid`): data-scaling curve
+(`--train_sentence_frac`) holding E5's best cell #2 fixed — scaffolding
+(`exp_e6_scale.sbatch`, `model/aggregate_e6.py`) committed, 4 runs queued.
+
+**Planned, not yet run** (flags already merged into `exp/tier2-grid`): **E8**
+cross-subject (`--exclude_subjects`), **E10** difficulty ladder. **E7** = the
+per-position InfoNCE, which *is* `exp/align-perword` (Family B) — and was also
+folded into E5 as the `align_mode perword` axis (cells 5–8).
 
 ---
 
@@ -86,13 +91,23 @@ For each, read **writeup → script → data → relevant model code**.
 3. `exp_logs/e4_signal_probes.json`
 4. `tests/eeg_signal_probe.py` (the original probe E4 extends)
 
-### E5 — component ablation grid
-1. `exp_logs/e5_ablation_grid_plan.md` (grid table + "Prerequisite — unified branch":
+### E5 — component ablation grid (COMPLETE)
+1. `exp_logs/e5_ablation_grid_writeup.md` (the null result + three conclusions) →
+   `exp_logs/e5_ablation_grid.md` (8-cell table with P/R/align) + `.json`
+2. `exp_logs/e5_ablation_grid_plan.md` (grid table + "Prerequisite — unified branch":
    why `tier2-grid` exists)
-2. `exp/tier2-grid` `model/train.py` — merged `--n_subject_buckets`,
+3. `exp/tier2-grid` `model/train.py` — merged `--n_subject_buckets`,
    `--bridge_transformer_layers`, `--align_mode` flags + `contrastive_alignment_perword`
-3. The parametrized sbatch (commit `fa759b1`) — one job per cell via `--export`
-4. Forward-looking: this is the next thing to actually run.
+4. `exp_e5_cell.sbatch` (one job per cell via `--export`, TAG grammar
+   `s{0,1}t{0,1}a{PL,PW}`) + `model/aggregate_e5.py` (scans `checkpoints_e5_*/`)
+
+### E6 — data-scaling curve (BUILT, not yet launched)
+1. `exp_logs/e6_data_scaling_plan.md` (build & run plan + conclusion-either-way:
+   rising curve ⇒ data-limited; flat curve ⇒ E1 fidelity cliff is fundamental)
+2. Holds E5's best cell #2 fixed, sweeps `--train_sentence_frac {0.10,0.25,0.50,1.00}`
+   (subsamples by unique sentence, so the split invariant holds; val/test stay full)
+3. `exp_e6_scale.sbatch` (`FRAC`+`TAG` via `--export`) + `model/aggregate_e6.py`
+   → `exp_logs/e6_data_scaling.{json,md}`
 
 ---
 
@@ -104,11 +119,13 @@ Read in **RQ order** (not numerical) — this is the actual argument:
 > the encoder be? → near-perfect, and the objective can't see it) → **E3** (RQ3
 > correlational: how does it fail? → collapse to memorized output) → **E2** (RQ3
 > causal: does it use EEG? → yes but non-functionally) → **E5** (RQ4: which component
-> helps? → TBD).
+> helps? → none; the frozen ceiling is architecture-independent) → **E6** (RQ4
+> follow-up: does data scale lift it? → TBD).
 
 The chain: *signal exists but is misaligned (E4) → alignment must be per-position,
 pooled can't get there (E1) → so the model collapses (E3) → the collapse isn't
-EEG-blindness, it's EEG-misuse (E2) → can architecture fix it? (E5)*.
+EEG-blindness, it's EEG-misuse (E2) → architecture can't fix it under frozen BART
+(E5) → is it data-limited or fundamental? (E6)*.
 
 ---
 
