@@ -77,16 +77,26 @@ and the aggregate is least diluted.
 ## Run mechanics
 
 One parametrized sbatch; `TAG` + `EXCLUDE` (`-`-delimited → CSV, to dodge sbatch's
-`--export` comma-splitting) + `FRAC` via `--export`:
+`--export` comma-splitting) + `FRAC` via `--export`.
+
+**Minimal first cut (3 jobs)** — the headline comparison: `k0` baseline + the
+`x09`/`c09` pair (half the subjects held out vs half the samples dropped), the
+highest-signal, least-diluted point. Run this first; fill in the intermediate
+counts only if the gap is worth resolving:
 
 ```bash
 sbatch --export=ALL,TAG=k0,EXCLUDE=,FRAC=                                     exp_e8_cross_subject.sbatch
+sbatch --export=ALL,TAG=x09,EXCLUDE=YLS-YMD-YMS-YRH-YRK-YRP-YSD-YSL-YTL,FRAC= exp_e8_cross_subject.sbatch
+sbatch --export=ALL,TAG=c09,EXCLUDE=,FRAC=0.491                               exp_e8_cross_subject.sbatch
+```
+
+**Full sweep (adds 4 jobs)** — turns the ctrl−excl gap into a 3-level curve:
+
+```bash
 sbatch --export=ALL,TAG=x03,EXCLUDE=YSD-YSL-YTL,FRAC=                         exp_e8_cross_subject.sbatch
 sbatch --export=ALL,TAG=x06,EXCLUDE=YRH-YRK-YRP-YSD-YSL-YTL,FRAC=             exp_e8_cross_subject.sbatch
-sbatch --export=ALL,TAG=x09,EXCLUDE=YLS-YMD-YMS-YRH-YRK-YRP-YSD-YSL-YTL,FRAC= exp_e8_cross_subject.sbatch
 sbatch --export=ALL,TAG=c03,EXCLUDE=,FRAC=0.827                               exp_e8_cross_subject.sbatch
 sbatch --export=ALL,TAG=c06,EXCLUDE=,FRAC=0.664                               exp_e8_cross_subject.sbatch
-sbatch --export=ALL,TAG=c09,EXCLUDE=,FRAC=0.491                               exp_e8_cross_subject.sbatch
 ```
 
 Each job trains, then runs `cross_subject_eval.py` (seen-vs-unseen subject F1 →

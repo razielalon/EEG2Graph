@@ -32,16 +32,22 @@
 ### After training, seen-vs-unseen subject F1 is scored (cross_subject_eval.py ->
 ### <ckpt>/test_by_subject.json); aggregate test F1 still lands in test_metrics.json.
 ###
-### Submit the 7 points (all queue in parallel; k0 is the shared baseline):
+### MINIMAL FIRST CUT (3 jobs) — the headline comparison. k0 baseline + the x09/c09
+### pair (half the subjects held out vs half the samples dropped) is the highest-
+### signal, least-diluted point; run this first, fill in x03/x06/c03/c06 only if the
+### gap is worth resolving at the smaller held-out counts:
 ###   sbatch --export=ALL,TAG=k0,EXCLUDE=,FRAC=                                            exp_e8_cross_subject.sbatch
+###   sbatch --export=ALL,TAG=x09,EXCLUDE=YLS-YMD-YMS-YRH-YRK-YRP-YSD-YSL-YTL,FRAC=        exp_e8_cross_subject.sbatch
+###   sbatch --export=ALL,TAG=c09,EXCLUDE=,FRAC=0.491                                      exp_e8_cross_subject.sbatch
+###
+### FULL SWEEP (7 points, all queue in parallel; k0 is the shared baseline) — adds the
+### intermediate held-out counts so the ctrl-excl gap is a 3-level curve, not one point:
 ###   # excl arm — drop whole subjects (nested tail of the sorted 18):
 ###   sbatch --export=ALL,TAG=x03,EXCLUDE=YSD-YSL-YTL,FRAC=                                exp_e8_cross_subject.sbatch
 ###   sbatch --export=ALL,TAG=x06,EXCLUDE=YRH-YRK-YRP-YSD-YSL-YTL,FRAC=                    exp_e8_cross_subject.sbatch
-###   sbatch --export=ALL,TAG=x09,EXCLUDE=YLS-YMD-YMS-YRH-YRK-YRP-YSD-YSL-YTL,FRAC=        exp_e8_cross_subject.sbatch
 ###   # ctrl arm — keep all subjects, drop a MATCHED #samples (frac = kept/10216):
 ###   sbatch --export=ALL,TAG=c03,EXCLUDE=,FRAC=0.827                                      exp_e8_cross_subject.sbatch
 ###   sbatch --export=ALL,TAG=c06,EXCLUDE=,FRAC=0.664                                      exp_e8_cross_subject.sbatch
-###   sbatch --export=ALL,TAG=c09,EXCLUDE=,FRAC=0.491                                      exp_e8_cross_subject.sbatch
 
 #SBATCH --qos=eliyanac
 #SBATCH --partition=l40s
