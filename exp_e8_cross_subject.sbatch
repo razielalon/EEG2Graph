@@ -123,6 +123,7 @@ python cross_subject_eval.py \
     --processed_dir ../processed_zuco2 \
     --triplets_path ../processed_zuco2/sentence_triplets.json \
     --exclude_subjects "$EXCLUDE_CSV" \
+    --beam_size 4 \
     --output "$OUT/test_by_subject.json" \
     || echo "WARN: cross_subject_eval.py failed; aggregate test_metrics.json still valid"
 

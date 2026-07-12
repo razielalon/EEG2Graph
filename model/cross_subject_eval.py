@@ -15,7 +15,9 @@ the true transfer gap is visible.
 
 It reuses inference.load_model / inference.predict_batch (generation) and
 train.compute_triplet_f1 (the exact metric train.py reports), so the numbers are
-comparable to test_metrics.json.
+comparable to test_metrics.json -- but only at the same beam width: --beam_size
+must match train.py's (default 4). Greedy seen/unseen F1 against beam-4 aggregate
+F1 is an apples-to-oranges comparison.
 
 Writes `test_by_subject.json` into the checkpoint dir (or --output). Held-out set
 comes from --exclude_subjects (same grammar as train.py: comma-separated ids); when
@@ -142,8 +144,9 @@ if __name__ == "__main__":
                     help="Comma-separated held-out subject ids (same list passed "
                          "to train.py --exclude_subjects). Empty = all seen.")
     ap.add_argument("--split", default="test")
-    ap.add_argument("--beam_size", type=int, default=1,
-                    help="num_beams (1=greedy, matches train.py's test eval).")
+    ap.add_argument("--beam_size", type=int, default=4,
+                    help="num_beams. MUST match train.py's --beam_size (default 4) "
+                         "or seen/unseen F1 is not comparable to test_metrics.json.")
     ap.add_argument("--max_len", type=int, default=128)
     ap.add_argument("--batch_size", type=int, default=16)
     ap.add_argument("--limit", type=int, default=0,
