@@ -77,11 +77,17 @@ consistency is what makes the null trustworthy.
 spanned 0.0083. Three orthogonal sweeps, one band, and it is the band of a handful of
 lucky tuple matches against 1936 gold triplets. As in E5/E6, the runs whose best val F1
 lands at epoch 1 (`x09`, `c06`) are degenerate; those that wander later (`k0` @39,
-`x03` @43, `c09` @44) are "marginally less degenerate," not working. The alignment loss
-does behave sensibly — it degrades monotonically as training subjects are removed (2.8732
-at k0 → 3.1532 at x09), so the bridge is measurably learning *less* with fewer people, and
-it still makes no difference to what comes out of the decoder. That is E6's finding again
-in a new coordinate.
+`x03` @43, `c09` @44) are "marginally less degenerate," not working.
+
+> **CORRECTION (2026-07-12).** This paragraph originally added that the alignment loss
+> "behaves sensibly — it degrades monotonically as training subjects are removed (2.8732
+> at k0 → 3.1532 at x09), so the bridge is measurably learning *less* with fewer people."
+> **That over-reads the number.** The pooled InfoNCE chance floor at `--batch_size 16` is
+> **2.86** (measured; `model/align_chance_floor.py`), so *every* E8 run — k0's 2.8732
+> included — sits **at or above chance**. There is no "learning less"; there is no
+> learning at any point on this axis. The spread from 2.87 to 3.15 is movement *within*
+> the chance band, not a degradation from a learned state. See
+> `e7_perword_alignment_writeup.md`.
 
 **4. RQ5 closes as a null: the ceiling is not a cross-subject-transfer wall.** The last
 alternative explanation for the frozen ~0 ceiling is eliminated. Combined with the rest,

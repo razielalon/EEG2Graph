@@ -33,11 +33,20 @@ under byte-identical code/seed. Each point is launched by `exp_e6_scale.sbatch` 
 **1. The curve is flat at the floor — data scale does not lift the frozen ceiling.**
 A 10× increase in training sentences (frac 0.10 → 1.00) moves test F1 from 0.0006 to
 0.0083: an absolute gain of ~0.008, which is the same magnitude as the *entire E5
-architecture grid spread* (0.0083). The whole curve lives inside one noise band. The
-alignment loss does fall monotonically as data grows (3.41 → 2.88), so the bridge is
-demonstrably learning a better-aligned encoder representation with more data — and it
-still buys no decodable output. This is the "flat at ~0" outcome, and it is the answer
-to RQ4's data half: **more ZuCo-scale data would not help.**
+architecture grid spread* (0.0083). The whole curve lives inside one noise band. This is
+the "flat at ~0" outcome, and it is the answer to RQ4's data half: **more ZuCo-scale data
+would not help.**
+
+> **CORRECTION (2026-07-12).** This section originally read the falling alignment loss
+> (3.41 → 2.88) as evidence that "the bridge is demonstrably learning a better-aligned
+> encoder representation with more data." **That was wrong.** The pooled InfoNCE loss has
+> a *chance floor* — the value produced by a bridge that has learned nothing is not 0, it
+> is ln(B) for batch size B. At `--batch_size 16`, that floor is **2.86** (measured;
+> `model/align_chance_floor.py`). So 3.41 → 2.88 is not learning: it is the loss
+> descending *toward chance from above* and stopping there. The correct statement is that
+> more data moves the bridge closer to **having learned nothing**, and no point on this
+> curve — including frac 1.00 at 2.8803 — ever gets below chance. See
+> `e7_perword_alignment_writeup.md`, which establishes this across E5/E6/E8.
 
 **2. The apparent uptick is not a trend.** The `aggregate_e6.py` read-off flags a
 +0.0060 slope over the top half (0.50 → 1.00), which in isolation could read as "still
