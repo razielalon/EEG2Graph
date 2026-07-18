@@ -1,0 +1,163 @@
+------------------------------------
+Sat 18 Jul 2026 09:28:07 IDT
+SLURM_JOBID:		19431000
+SLURM_JOB_NODELIST:	ee-l40s-01
+SLURM_SCRATCH_DIR:	/scratch/zivcz/19431000
+Allocated Resouces:	cpu - 8 / mem - 49152 MB / gpu - 1
+SLURM_GPU_INDEX:	4
+Running as zivcz from eliyanac account with eliyanac QOS
+------------------------------------
+JOBID=19431000
+NODELIST=ee-l40s-01
+START=Sat 18 Jul 2026 09:28:07 IDT
+Sat Jul 18 09:28:07 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.126.20             Driver Version: 580.126.20     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L40S                    On  |   00000000:83:00.0 Off |                    0 |
+| N/A   30C    P8             33W /  350W |       0MiB /  46068MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+CHECKPOINTS DISCOVERED:
+../checkpoints_e5_s0t0aPL
+../checkpoints_e5_s0t0aPW
+../checkpoints_e5_s0t1aPL
+../checkpoints_e5_s0t1aPW
+../checkpoints_e5_s1t0aPL
+../checkpoints_e5_s1t0aPW
+../checkpoints_e5_s1t1aPL
+../checkpoints_e5_s1t1aPW
+../checkpoints_e6_f010
+../checkpoints_e6_f025
+../checkpoints_e6_f050
+../checkpoints_e6_f100
+../checkpoints_e8_c03
+../checkpoints_e8_c06
+../checkpoints_e8_c09
+../checkpoints_e8_k0
+../checkpoints_e8_x03
+../checkpoints_e8_x06
+../checkpoints_e8_x09
+[raw]            top1=0.065 top10=0.395 med=16 (chance10=0.149, gallery=67)
+[random_bridge]  top1=0.069 top10=0.404+/-0.002 med=15
+Device: cuda
+
+=== checkpoint checkpoints_e5_s0t0aPL (../checkpoints_e5_s0t0aPL/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 9712.95it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+  [bridge ] top1=0.051 top10=0.339 med=18
+  [encoder] top1=0.025 top10=0.225 med=26
+  [text UB] top1=0.639 top10=0.930 med=1
+
+=== checkpoint checkpoints_e5_s0t0aPW (../checkpoints_e5_s0t0aPW/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 9821.02it/s]
+  [bridge ] top1=0.049 top10=0.348 med=18
+  [encoder] top1=0.048 top10=0.326 med=20
+
+=== checkpoint checkpoints_e5_s0t1aPL (../checkpoints_e5_s0t1aPL/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 11295.00it/s]
+/home/zivcz/.conda/envs/eeg2graph/lib/python3.11/site-packages/torch/nn/modules/transformer.py:382: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  warnings.warn(
+  [bridge ] top1=0.021 top10=0.166 med=31
+  [encoder] top1=0.026 top10=0.202 med=28
+
+=== checkpoint checkpoints_e5_s0t1aPW (../checkpoints_e5_s0t1aPW/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 10078.82it/s]
+/home/zivcz/.conda/envs/eeg2graph/lib/python3.11/site-packages/torch/nn/modules/transformer.py:382: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  warnings.warn(
+  [bridge ] top1=0.015 top10=0.157 med=30
+  [encoder] top1=0.024 top10=0.218 med=26
+
+=== checkpoint checkpoints_e5_s1t0aPL (../checkpoints_e5_s1t0aPL/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 10747.90it/s]
+  [bridge ] top1=0.044 top10=0.326 med=19
+  [encoder] top1=0.035 top10=0.246 med=25
+
+=== checkpoint checkpoints_e5_s1t0aPW (../checkpoints_e5_s1t0aPW/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 11020.99it/s]
+  [bridge ] top1=0.047 top10=0.343 med=19
+  [encoder] top1=0.057 top10=0.357 med=18
+
+=== checkpoint checkpoints_e5_s1t1aPL (../checkpoints_e5_s1t1aPL/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 15154.50it/s]
+/home/zivcz/.conda/envs/eeg2graph/lib/python3.11/site-packages/torch/nn/modules/transformer.py:382: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  warnings.warn(
+  [bridge ] top1=0.018 top10=0.182 med=31
+  [encoder] top1=0.029 top10=0.226 med=27
+
+=== checkpoint checkpoints_e5_s1t1aPW (../checkpoints_e5_s1t1aPW/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 12691.91it/s]
+/home/zivcz/.conda/envs/eeg2graph/lib/python3.11/site-packages/torch/nn/modules/transformer.py:382: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+  warnings.warn(
+  [bridge ] top1=0.026 top10=0.204 med=29
+  [encoder] top1=0.026 top10=0.230 med=27
+
+=== checkpoint checkpoints_e6_f010 (../checkpoints_e6_f010/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 12420.31it/s]
+  [bridge ] top1=0.062 top10=0.366 med=17
+  [encoder] top1=0.019 top10=0.177 med=31
+
+=== checkpoint checkpoints_e6_f025 (../checkpoints_e6_f025/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 14908.73it/s]
+  [bridge ] top1=0.052 top10=0.334 med=19
+  [encoder] top1=0.029 top10=0.222 med=28
+
+=== checkpoint checkpoints_e6_f050 (../checkpoints_e6_f050/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 12267.69it/s]
+  [bridge ] top1=0.059 top10=0.320 med=20
+  [encoder] top1=0.028 top10=0.230 med=27
+
+=== checkpoint checkpoints_e6_f100 (../checkpoints_e6_f100/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 12155.34it/s]
+  [bridge ] top1=0.044 top10=0.326 med=19
+  [encoder] top1=0.035 top10=0.246 med=25
+
+=== checkpoint checkpoints_e8_c03 (../checkpoints_e8_c03/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 18428.27it/s]
+  [bridge ] top1=0.055 top10=0.311 med=20
+  [encoder] top1=0.024 top10=0.186 med=32
+
+=== checkpoint checkpoints_e8_c06 (../checkpoints_e8_c06/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 12244.47it/s]
+  [bridge ] top1=0.052 top10=0.323 med=20
+  [encoder] top1=0.027 top10=0.210 med=29
+
+=== checkpoint checkpoints_e8_c09 (../checkpoints_e8_c09/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 17554.70it/s]
+  [bridge ] top1=0.051 top10=0.307 med=20
+  [encoder] top1=0.024 top10=0.179 med=31
+
+=== checkpoint checkpoints_e8_k0 (../checkpoints_e8_k0/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 17751.76it/s]
+  [bridge ] top1=0.051 top10=0.339 med=18
+  [encoder] top1=0.025 top10=0.225 med=26
+
+=== checkpoint checkpoints_e8_x03 (../checkpoints_e8_x03/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 17672.00it/s]
+  [bridge ] top1=0.048 top10=0.312 med=21
+  [encoder] top1=0.019 top10=0.189 med=30
+
+=== checkpoint checkpoints_e8_x06 (../checkpoints_e8_x06/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 12226.48it/s]
+  [bridge ] top1=0.051 top10=0.323 med=20
+  [encoder] top1=0.033 top10=0.221 med=27
+
+=== checkpoint checkpoints_e8_x09 (../checkpoints_e8_x09/best_model.pt) ===
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 12871.59it/s]
+  [bridge ] top1=0.053 top10=0.310 med=20
+  [encoder] top1=0.017 top10=0.168 med=32
+
+Saved -> ../exp_logs/e9_retrieval.json
+END=Sat 18 Jul 2026 09:44:10 IDT
