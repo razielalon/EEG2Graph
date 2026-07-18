@@ -47,7 +47,7 @@
 #SBATCH --time=0-04:00:00
 #SBATCH --job-name=eeg2graph-e9
 #SBATCH --output=logs/eeg2graph-e9-%J.out
-#SBATCH --mail-user=zivcz@post.bgu.ac.il          ### replace with your BGU email if different
+#SBATCH --mail-user=razielal@post.bgu.ac.il          ### replace with your BGU email if different
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --gpus=1
 #SBATCH --mem=48G
