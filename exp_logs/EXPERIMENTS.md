@@ -1,9 +1,9 @@
 # EEG2Graph — Experiment Index
 
 Master index of every experiment, which branch it lives on, what it found, and a
-deep-dive reading path for each. Generated 2026-06-27; last updated 2026-07-14 —
+deep-dive reading path for each. Generated 2026-06-27; last updated 2026-07-18 —
 **Tier 2 is finished on the cluster: E5 (8/8), E6 (4/4) and E8 (7/7) all completed,
-and E7 was answered without a new run.**
+E7 was answered without a new run, and E9 (retrieval probe, 19/19 checkpoints) is done.**
 
 > **Branch note:** the E-series writeups/data are **not on `main`**. E1–E4 live on
 > `exp/tier1-conclusions`; E5–E8 live on `exp/tier2-grid`. Use `git checkout <branch>`
@@ -31,7 +31,7 @@ Two families:
 | E6 data scaling | RQ4 | **done — 4/4 points** | `exp/tier2-grid` |
 | E7 per-word alignment | RQ2 | **answered, no new run needed** (it *is* E5 cells 5–8) | `exp/tier2-grid` (+ original impl on `exp/align-perword`) |
 | E8 cross-subject | RQ5 | **done — 7/7 points** | `exp/tier2-grid` |
-| E9 retrieval eval | RQ1/RQ2 | **proposed, not built** — needs no cluster time | — |
+| E9 retrieval eval | RQ1/RQ2 | **done — 19/19 checkpoints** (job 19431000) | `exp/e9-retrieval` |
 | E10 difficulty ladder | RQ4 | **planned, not built** (flags merged) | `exp/tier2-grid` |
 
 **Headline across the whole series (E7, 2026-07-12):** the alignment InfoNCE loss has a
@@ -41,6 +41,17 @@ was being read against an implicit floor of zero. The bridge does not learn EEG 
 the frozen decoder then ignores; **it learns nothing at all** — it cannot pick the correct
 sentence's text embedding out of a batch of 16 better than chance. That reframes E5/E6/E8
 from three unexplained nulls into one quantified, mechanistic negative result.
+
+**E9 update (2026-07-18) — the signal is *preserved*, not destroyed.** E4's identical
+retrieval probe, re-run on the trained representations, shows every bridge retrieves the
+read sentence well above chance (bridge top-10 ≈ 0.33, encoder ≈ 0.20 vs chance 0.149;
+raw 0.395, untrained bridge 0.404, text upper bound 0.930). So E7's "the bridge learns
+nothing" must be **scoped**: it learns nothing that aligns to REBEL's text geometry, but it
+does **not** destroy the sentence-level identity signal it starts with — that survives into
+the very states the decoder reads, and F1 is still 0. The failure is **representational
+mismatch on two axes** — wrong *kind* (identity, not word-level triplet structure; E4) and
+wrong *geometry* (not text-aligned; E7) — not signal absence. E9 is the reconciliation that
+makes E4 (signal present) and E7 (nothing text-aligned) mutually consistent.
 
 ---
 
@@ -56,16 +67,10 @@ from three unexplained nulls into one quantified, mechanistic negative result.
 | **E6** Data-scaling curve | RQ4 | `exp/tier2-grid` | **COMPLETE — 4/4 points.** `--train_sentence_frac` ∈ {0.10, 0.25, 0.50, 1.00} on E5's best cell. F1 = 0.0006 / 0.0000 / 0.0023 / 0.0083 — **non-monotone and flat at the floor**; a 10× data increase buys less than the E5 architecture spread. **More ZuCo-scale data would not help.** |
 | **E7** Per-word alignment + **alignment chance floor** | RQ2 | `exp/tier2-grid` | **ANSWERED WITHOUT A NEW RUN** — per-word alignment already ran as E5 cells 5–8. It scores 0/1936 and lands *exactly on its own chance floor*. Measuring the floors (pooled 2.865, per-word 6.182) shows **every run in E5/E6/E8 sits at or above chance**: the bridge never learned anything. Also: the per-word objective is multi-positive, so a perfectly-aligned encoder scores *worse than chance* — it never asked for what it was meant to ask for. |
 | **E8** Cross-subject (shared vs subject-specific codes) | RQ5 | `exp/tier2-grid` | **COMPLETE — 7/7 points.** Paired `excl` (drop whole subjects) vs `ctrl` (drop matched sample count) at kept-frac 0.83/0.66/0.49. The subject-specificity penalty (ctrl − excl) is ≈0 and has the *wrong sign* (−0.0023 … −0.0011). **The ceiling is not a cross-subject-transfer wall.** Honest limit: at the floor, "shared codes" and "uniformly undecodable" are indistinguishable. |
+| **E9** Bridge/encoder retrieval probe | RQ1/RQ2 | `exp/e9-retrieval` | **COMPLETE — 19/19 checkpoints.** E4's identical retrieval probe on the trained representations: bridge top-10 ≈ 0.31–0.37, encoder ≈ 0.20 — **well above chance 0.149** (raw 0.395, untrained bridge 0.404, text upper bound 0.930). Signal is **preserved, not destroyed**; F1≈0 is representational mismatch (wrong *kind* + wrong *geometry*), reconciling E4 (signal present) with E7 (not text-aligned). Temporal-bridge cells alone collapse toward chance; per-word alignment alone keeps identity through the encoder. |
 
 ### Not yet run
 
-- **E9 — retrieval eval (proposed by E7; the highest-value next step).** Rank the gold
-  sentence among N candidates by bridge-encoding similarity, sweep N, report top-k against
-  the 1/N chance line. Runs post-hoc on the **19 checkpoints already in hand** (E5 + E6 +
-  E8) — no retraining, no cluster time. Unlike triplet F1 it cannot be pinned at zero by
-  the exact-match requirement, so it has real dynamic range. At chance ⇒ the negative
-  result is complete; above chance ⇒ information is present but unusable by the decoder,
-  which is a different thesis with a different fix.
 - **E10 — difficulty ladder** (RQ4). Flags already merged into `exp/tier2-grid`; nothing
   built or launched.
 
@@ -166,6 +171,16 @@ For each, read **writeup → script → data → relevant model code**.
 4. `exp_e8_cross_subject.sbatch` and `exp_e8_rescore.sbatch` (rescore-only job, added when
    a seen/unseen beam mismatch was found — commit `b3da206`)
 
+### E9 — bridge/encoder retrieval probe (COMPLETE, 19/19)
+1. `exp_logs/e9_retrieval_writeup.md` (seven conclusions + the E4/E7 reconciliation +
+   "what this does **not** show") → `exp_logs/e9_retrieval.md` + `.json`
+2. `exp_logs/e9_retrieval_plan.md` (design + **pre-registered** decision rule
+   preserved-vs-destroyed, and the numpy-only raw/random baselines locked before the run)
+3. `model/bridge_retrieval_probe.py` — E4's `retrieval_topk` copied **verbatim**; only the
+   input feature matrix varies (raw / random_bridge / bridge / encoder / text upper bound)
+4. `exp_e9_probe.sbatch` (post-hoc, auto-discovers `checkpoints_e5/6/8_*`) + run log
+   `exp_logs/eeg2graph-e9-19431000.out`
+
 ---
 
 ## Recommended cross-experiment narrative order
@@ -179,17 +194,24 @@ Read in **RQ order** (not numerical) — this is the actual argument:
 > → none; the frozen ceiling is architecture-independent) → **E6** (RQ4: does data scale
 > lift it? → no, the curve is flat at the floor) → **E8** (RQ5: is it a subject-transfer
 > wall? → no) → **E7** (the reframe: none of those nulls needed explaining, because the
-> bridge never beat chance in the first place).
+> bridge never beat chance in the first place) → **E9** (…and yet the signal is *preserved*:
+> the trained representation retrieves the sentence above chance all the way to the decoder's
+> input, so the wall is representational mismatch, not signal loss).
 
 The chain: *signal exists but is misaligned (E4) → alignment must be per-position, and
 pooled can't get there (E1) → so the model collapses (E3) → the collapse isn't
 EEG-blindness, it's EEG-misuse (E2) → architecture can't fix it under frozen BART (E5) →
 neither can data (E6) → nor is it a cross-subject wall (E8) → because the bridge never
-learned any EEG code at all: every alignment loss in the series sits at chance (E7).*
+learned any EEG code that aligns to REBEL's text geometry: every alignment loss in the
+series sits at chance (E7) → and yet the signal is not *gone* — the trained representation
+still retrieves the sentence above chance, so F1≈0 is representational mismatch (wrong kind
++ wrong geometry), not absence of signal (E9).*
 
-**The one open question with dynamic range:** does the bridge encoding contain *any*
-recoverable sentence information? That is E9 (retrieval eval) — post-hoc, no cluster time,
-runs on checkpoints already in hand.
+**That open question is now answered (E9):** the bridge encoding *does* contain recoverable
+sentence information — bridge retrieval ≈ 0.33 vs chance 0.149, above chance even in the
+encoder states the decoder reads. So the negative result is not "no signal": it is signal of
+the wrong *kind* (sentence identity, not triplet structure) in the wrong *geometry* (not
+text-aligned), through a frozen decoder that cannot convert it.
 
 ---
 
@@ -207,5 +229,5 @@ runs on checkpoints already in hand.
   the floor a single-seed point wobbles; every conclusion rests on the *magnitude of the
   whole band* (≤0.008 F1), never on point-to-point ordering.
 - **Conclusion branches are unmerged.** E1–E4 live only on `exp/tier1-conclusions`, E5–E8
-  only on `exp/tier2-grid`. Merge both into `main` before the final thesis writeup so the
-  analysis isn't stranded on side branches.
+  only on `exp/tier2-grid`, E9 only on `exp/e9-retrieval`. Merge all three into `main`
+  before the final thesis writeup so the analysis isn't stranded on side branches.
