@@ -3,7 +3,8 @@
 Master index of every experiment, which branch it lives on, what it found, and a
 deep-dive reading path for each. Generated 2026-06-27; last updated 2026-07-18 —
 **Tier 2 is finished on the cluster: E5 (8/8), E6 (4/4) and E8 (7/7) all completed,
-E7 was answered without a new run, and E9 (retrieval probe, 19/19 checkpoints) is done.**
+E7 was answered without a new run, E9 (retrieval probe, 19/19 checkpoints) is done, and E10
+(sentence-level baselines + ZuCo-1 replication) closes the RQ1 arc.**
 
 > **Branch note:** the E-series writeups/data are **not on `main`**. E1–E4 live on
 > `exp/tier1-conclusions`; E5–E8 live on `exp/tier2-grid`. Use `git checkout <branch>`
@@ -32,7 +33,8 @@ Two families:
 | E7 per-word alignment | RQ2 | **answered, no new run needed** (it *is* E5 cells 5–8) | `exp/tier2-grid` (+ original impl on `exp/align-perword`) |
 | E8 cross-subject | RQ5 | **done — 7/7 points** | `exp/tier2-grid` |
 | E9 retrieval eval | RQ1/RQ2 | **done — 19/19 checkpoints** (job 19431000) | `exp/e9-retrieval` |
-| E10 difficulty ladder | RQ4 | **planned, not built** (flags merged) | `exp/tier2-grid` |
+| E10 sentence baselines + ZuCo-1 replication | RQ1 | **done** (post-hoc, CPU, both datasets) | `exp/e10-baselines` |
+| E11 difficulty ladder | RQ4 | **planned, not built** (superseded by E9/E10) | `exp/tier2-grid` |
 
 **Headline across the whole series (E7, 2026-07-12):** the alignment InfoNCE loss has a
 **chance floor** (pooled 2.865, per-word 6.182 — measured by `model/align_chance_floor.py`),
@@ -53,6 +55,17 @@ mismatch on two axes** — wrong *kind* (identity, not word-level triplet struct
 wrong *geometry* (not text-aligned; E7) — not signal absence. E9 is the reconciliation that
 makes E4 (signal present) and E7 (nothing text-aligned) mutually consistent.
 
+**E10 update (2026-07-18) — what the signal is *worth*, and a second dataset.** Used
+directly, an **oracle retrieve-and-copy baseline** (retrieve the sentence from EEG, emit its
+gold triplets) scores triplet-F1 **0.067 (ZuCo 2.0) / 0.094 (ZuCo 1.0) — ~8–10× the
+generative model's 0.008**: the word-level generative architecture wastes ~90% of the signal
+it demonstrably has (E9). But the **deployable** version (unseen sentences → retrieve from
+train) and the model's own collapse mode (most-frequent-train triplet) both score **0.000** —
+on a sentence-disjoint split triplets never recur, so nothing not handed the answer can
+produce them. Separately, E4's probe **replicates on ZuCo 1.0** (12 different subjects):
+sentence-identity 0.420 (2.7× chance, gamma-strongest), word-structure at chance. RQ1 is now
+cross-dataset, and the negative result is robust.
+
 ---
 
 ## Family A — Diagnostic / conclusion experiments
@@ -68,11 +81,14 @@ makes E4 (signal present) and E7 (nothing text-aligned) mutually consistent.
 | **E7** Per-word alignment + **alignment chance floor** | RQ2 | `exp/tier2-grid` | **ANSWERED WITHOUT A NEW RUN** — per-word alignment already ran as E5 cells 5–8. It scores 0/1936 and lands *exactly on its own chance floor*. Measuring the floors (pooled 2.865, per-word 6.182) shows **every run in E5/E6/E8 sits at or above chance**: the bridge never learned anything. Also: the per-word objective is multi-positive, so a perfectly-aligned encoder scores *worse than chance* — it never asked for what it was meant to ask for. |
 | **E8** Cross-subject (shared vs subject-specific codes) | RQ5 | `exp/tier2-grid` | **COMPLETE — 7/7 points.** Paired `excl` (drop whole subjects) vs `ctrl` (drop matched sample count) at kept-frac 0.83/0.66/0.49. The subject-specificity penalty (ctrl − excl) is ≈0 and has the *wrong sign* (−0.0023 … −0.0011). **The ceiling is not a cross-subject-transfer wall.** Honest limit: at the floor, "shared codes" and "uniformly undecodable" are indistinguishable. |
 | **E9** Bridge/encoder retrieval probe | RQ1/RQ2 | `exp/e9-retrieval` | **COMPLETE — 19/19 checkpoints.** E4's identical retrieval probe on the trained representations: bridge top-10 ≈ 0.31–0.37, encoder ≈ 0.20 — **well above chance 0.149** (raw 0.395, untrained bridge 0.404, text upper bound 0.930). Signal is **preserved, not destroyed**; F1≈0 is representational mismatch (wrong *kind* + wrong *geometry*), reconciling E4 (signal present) with E7 (not text-aligned). Temporal-bridge cells alone collapse toward chance; per-word alignment alone keeps identity through the encoder. |
+| **E10** Sentence-level baselines + ZuCo-1 replication | RQ1 | `exp/e10-baselines` | **DONE (both datasets).** Oracle EEG retrieve-and-copy F1 **0.067 / 0.094** (ZuCo 2.0 / 1.0) — ~8–10× the model — but deployable (unseen sentences) and most-frequent-train both **0.000**: the signal does not support triplets on unseen sentences. E4 replicates on ZuCo 1.0 (sentence-identity 0.420, 2.7× chance; word-structure at chance). Constructive capstone + external validity. |
 
 ### Not yet run
 
-- **E10 — difficulty ladder** (RQ4). Flags already merged into `exp/tier2-grid`; nothing
-  built or launched.
+- **E11 — difficulty ladder** (RQ4). Flags merged into `exp/tier2-grid`; nothing built.
+  Largely **superseded** — E9 (signal preserved) and E10 (retrieval baseline scores 0 on
+  unseen sentences) already locate the bottleneck as representational, so making the task
+  easier is unlikely to change the verdict.
 
 ---
 
@@ -181,6 +197,14 @@ For each, read **writeup → script → data → relevant model code**.
 4. `exp_e9_probe.sbatch` (post-hoc, auto-discovers `checkpoints_e5/6/8_*`) + run log
    `exp_logs/eeg2graph-e9-19431000.out`
 
+### E10 — sentence-level baselines & cross-dataset replication (COMPLETE)
+1. `exp_logs/e10_sentence_baseline_writeup.md` (E10a retrieve-and-copy: two conclusions
+   pulling opposite ways; E10b ZuCo-1 replication) →
+   `exp_logs/e10_sentence_baseline_{zuco2,zuco1}.json`
+2. `model/sentence_retrieval_baseline.py` — REBEL-free; E4/E9 retrieval front end + micro-F1
+   matching `train.py:compute_triplet_f1`; conditions oracle / deployable / random / freq-train
+3. `exp_logs/e4_signal_probes_zuco1.json` (E10b = E4's probe re-run on ZuCo 1.0)
+
 ---
 
 ## Recommended cross-experiment narrative order
@@ -196,7 +220,10 @@ Read in **RQ order** (not numerical) — this is the actual argument:
 > wall? → no) → **E7** (the reframe: none of those nulls needed explaining, because the
 > bridge never beat chance in the first place) → **E9** (…and yet the signal is *preserved*:
 > the trained representation retrieves the sentence above chance all the way to the decoder's
-> input, so the wall is representational mismatch, not signal loss).
+> input, so the wall is representational mismatch, not signal loss) → **E10** (the
+> constructive check: an oracle sentence-retrieval baseline beats the model ~10×, but even it
+> scores 0 on unseen sentences — the signal does not support the task; and E4 replicates on a
+> second dataset).
 
 The chain: *signal exists but is misaligned (E4) → alignment must be per-position, and
 pooled can't get there (E1) → so the model collapses (E3) → the collapse isn't
