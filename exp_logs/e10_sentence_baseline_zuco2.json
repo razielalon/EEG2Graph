@@ -1,0 +1,38 @@
+{
+  "data": "processed_zuco",
+  "n_test": 1246,
+  "n_test_unique": 67,
+  "n_train_unique": 529,
+  "n_gold": 1936,
+  "retrieval_top1_acc": 0.06500802568218299,
+  "self_copy_f1": 1.0,
+  "oracle": {
+    "precision": 0.06195840554592721,
+    "recall": 0.07386363636363637,
+    "f1": 0.06738925541941565,
+    "correct": 143,
+    "n_pred": 2308,
+    "n_gold": 1936
+  },
+  "deployable": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "correct": 0,
+    "n_pred": 1748,
+    "n_gold": 1936
+  },
+  "random_copy_f1": 0.014215251564265525,
+  "freq_train_triplet": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "correct": 0,
+    "n_pred": 1246,
+    "n_gold": 1936
+  },
+  "model_reference": {
+    "e5_best_test_f1": 0.0083,
+    "typical_test_f1": 0.0
+  }
+}
